@@ -1,0 +1,168 @@
+enum ProcessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("procession_status")
+  @@schema("operations")
+}
+
+model Procession {
+  id                String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalEditionId String           @map("festival_edition_id") @db.Uuid
+  name              String           @db.VarChar(160)
+  description       String?          @db.Text
+  date              DateTime         @db.Date
+  startTime         DateTime?        @map("start_time") @db.Time(0)
+  estimatedEndTime  DateTime?        @map("estimated_end_time") @db.Time(0)
+  startLocation     String?          @map("start_location") @db.VarChar(255)
+  endLocation       String?          @map("end_location") @db.VarChar(255)
+  order             Int?             @db.SmallInt
+  status            ProcessionStatus @default(SCHEDULED)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?        @map("deleted_at") @db.Timestamptz(6)
+
+  festivalEdition FestivalEdition   @relation(fields: [festivalEditionId], references: [id], onDelete: Restrict)
+  steps           ProcessionStep[]
+  routes          ProcessionRoute[]
+
+  @@index([festivalEditionId])
+  @@map("procession")
+  @@schema("operations")
+}
+
+/// Qué pasos participan en una procesión y en qué orden.
+model ProcessionStep {
+  id                       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  processionId             String  @map("procession_id") @db.Uuid
+  processionalStepId       String  @map("processional_step_id") @db.Uuid
+  order                    Int     @db.SmallInt
+  estimatedDurationMinutes Int?    @map("estimated_duration_minutes") @db.SmallInt
+  notes                    String? @db.Text
+
+  procession       Procession       @relation(fields: [processionId], references: [id], onDelete: Cascade)
+  processionalStep ProcessionalStep @relation(fields: [processionalStepId], references: [id], onDelete: Restrict)
+
+  @@unique([processionId, processionalStepId])
+  @@unique([processionId, order])
+  @@map("procession_step")
+  @@schema("operations")
+}
+
+model ProcessionRoute {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  processionId String   @map("procession_id") @db.Uuid
+  name         String?  @db.VarChar(160)
+  description  String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  procession Procession             @relation(fields: [processionId], references: [id], onDelete: Cascade)
+  points     ProcessionRoutePoint[]
+
+  @@index([processionId])
+  @@map("procession_route")
+  @@schema("operations")
+}
+
+model ProcessionRoutePoint {
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  routeId     String  @map("route_id") @db.Uuid
+  order       Int     @db.SmallInt
+  latitude    Decimal @db.Decimal(9, 6)
+  longitude   Decimal @db.Decimal(9, 6)
+  streetName  String? @map("street_name") @db.VarChar(200)
+  description String? @db.Text
+
+  route ProcessionRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, order])
+  @@map("procession_route_point")
+  @@schema("operations")
+}
+
+enum EventType {
+  PROCESSION
+  MASS
+  CONFERENCE
+  CONCERT
+  EXHIBITION
+  CULTURAL_ACTIVITY
+  CHILDREN_ACTIVITY
+  TOURISM_ACTIVITY
+  OTHER
+
+  @@map("event_type")
+  @@schema("operations")
+}
+
+enum EventStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+
+  @@map("event_status")
+  @@schema("operations")
+}
+
+/// Programación anual genérica: filtrable por fecha, tipo, ubicación, paso.
+model Event {
+  id                String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalEditionId String      @map("festival_edition_id") @db.Uuid
+  title             String      @db.VarChar(200)
+  slug              String      @db.VarChar(220)
+  description       String?     @db.Text
+  eventType         EventType   @map("event_type")
+  startDatetime     DateTime    @map("start_datetime") @db.Timestamptz(6)
+  endDatetime       DateTime?   @map("end_datetime") @db.Timestamptz(6)
+  religiousSiteId   String?     @map("religious_site_id") @db.Uuid
+  locationText      String?     @map("location_text") @db.VarChar(255)
+  capacity          Int?
+  status            EventStatus @default(SCHEDULED)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?   @map("deleted_at") @db.Timestamptz(6)
+
+  festivalEdition FestivalEdition     @relation(fields: [festivalEditionId], references: [id], onDelete: Restrict)
+  religiousSite   ReligiousSite?      @relation(fields: [religiousSiteId], references: [id], onDelete: SetNull)
+  steps           EventStep[]
+  organizations   EventOrganization[]
+
+  @@unique([festivalEditionId, slug])
+  @@index([festivalEditionId])
+  @@index([startDatetime])
+  @@map("event")
+  @@schema("operations")
+}
+
+model EventStep {
+  id                 String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventId            String  @map("event_id") @db.Uuid
+  processionalStepId String  @map("processional_step_id") @db.Uuid
+  notes              String? @db.Text
+
+  event            Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  processionalStep ProcessionalStep @relation(fields: [processionalStepId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, processionalStepId])
+  @@map("event_step")
+  @@schema("operations")
+}
+
+model EventOrganization {
+  id             String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventId        String  @map("event_id") @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  role           String? @db.VarChar(80)
+  notes          String? @db.Text
+
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, organizationId])
+  @@map("event_organization")
+  @@schema("operations")
+}

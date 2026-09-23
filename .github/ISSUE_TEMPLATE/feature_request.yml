@@ -1,0 +1,26 @@
+name: Propuesta de funcionalidad
+description: Proponer algo nuevo o un cambio de comportamiento
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: ¿Qué problema resuelve?
+      description: Contexto de negocio — por qué hace falta
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta
+      description: Qué te gustaría que pasara
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+    validations:
+      required: false

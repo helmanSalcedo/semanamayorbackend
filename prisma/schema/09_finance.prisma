@@ -1,0 +1,271 @@
+enum DonationCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+
+  @@map("donation_campaign_status")
+  @@schema("finance")
+}
+
+model DonationCampaign {
+  id          String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalId  String?                @map("festival_id") @db.Uuid
+  name        String                 @db.VarChar(200)
+  slug        String                 @unique @db.VarChar(220)
+  description String?                @db.Text
+  goalAmount  Decimal?               @map("goal_amount") @db.Decimal(14, 2)
+  currency    String                 @default("COP") @db.Char(3)
+  startDate   DateTime?              @map("start_date") @db.Date
+  endDate     DateTime?              @map("end_date") @db.Date
+  status      DonationCampaignStatus @default(DRAFT)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?              @map("deleted_at") @db.Timestamptz(6)
+
+  festival     Festival?     @relation(fields: [festivalId], references: [id], onDelete: SetNull)
+  donations    Donation[]
+  sponsorships Sponsorship[]
+
+  @@index([festivalId])
+  @@map("donation_campaign")
+  @@schema("finance")
+}
+
+enum DonorVisibility {
+  PUBLIC
+  PRIVATE
+  ANONYMOUS
+
+  @@map("donor_visibility")
+  @@schema("finance")
+}
+
+enum DonationStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+  CANCELLED
+
+  @@map("donation_status")
+  @@schema("finance")
+}
+
+/// Nunca se hace UPDATE/DELETE físico de una donación confirmada: los
+/// cambios de estado quedan en DonationStatusHistory. amount > 0 se aplica
+/// vía CHECK constraint añadido en migración raw SQL (Prisma DSL no soporta
+/// CHECK arbitrario) — ver migrations/..._check_constraints.
+model Donation {
+  id                String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  campaignId        String?         @map("campaign_id") @db.Uuid
+  donorPersonId     String?         @map("donor_person_id") @db.Uuid
+  donorNameSnapshot String?         @map("donor_name_snapshot") @db.VarChar(200)
+  donorEmail        String?         @map("donor_email") @db.VarChar(180)
+  donorVisibility   DonorVisibility @default(PRIVATE) @map("donor_visibility")
+  isAnonymous       Boolean         @default(false) @map("is_anonymous")
+  amount            Decimal         @db.Decimal(14, 2)
+  currency          String          @default("COP") @db.Char(3)
+  status            DonationStatus  @default(PENDING)
+  notes             String?         @db.Text
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  campaign      DonationCampaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  donorPerson   Person?                 @relation(fields: [donorPersonId], references: [id], onDelete: SetNull)
+  allocations   DonationAllocation[]
+  transactions  PaymentTransaction[]
+  statusHistory DonationStatusHistory[]
+  receipt       DonationReceipt?
+
+  @@index([campaignId])
+  @@index([donorPersonId])
+  @@index([status, createdAt])
+  @@map("donation")
+  @@schema("finance")
+}
+
+/// A qué puede destinarse una donación (o parte de ella). BENEFICIARY_ID es
+/// NULL cuando beneficiaryType = JUNTA (fondo general, no tiene tabla propia).
+enum BeneficiaryType {
+  JUNTA
+  FESTIVAL
+  FESTIVAL_EDITION
+  PROCESSIONAL_STEP
+  EVENT
+  PROJECT
+
+  @@map("beneficiary_type")
+  @@schema("finance")
+}
+
+/// La suma de allocations de una donación debe igualar donation.amount.
+/// Validado por un constraint trigger DEFERRABLE en migración raw SQL
+/// (no expresable en Prisma DSL) — ver ARCHITECTURE.md §G.2.
+model DonationAllocation {
+  id              String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  donationId      String          @map("donation_id") @db.Uuid
+  beneficiaryType BeneficiaryType @map("beneficiary_type")
+  beneficiaryId   String?         @map("beneficiary_id") @db.Uuid
+  amount          Decimal         @db.Decimal(14, 2)
+  percentage      Decimal?        @db.Decimal(5, 2)
+  notes           String?         @db.Text
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donation Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+
+  @@index([donationId])
+  @@index([beneficiaryType, beneficiaryId])
+  @@map("donation_allocation")
+  @@schema("finance")
+}
+
+model DonationStatusHistory {
+  id              String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  donationId      String          @map("donation_id") @db.Uuid
+  fromStatus      DonationStatus? @map("from_status")
+  toStatus        DonationStatus  @map("to_status")
+  changedByUserId String?         @map("changed_by_user_id") @db.Uuid
+  reason          String?         @db.Text
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donation Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+
+  @@index([donationId])
+  @@map("donation_status_history")
+  @@schema("finance")
+}
+
+model DonationReceipt {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  donationId      String   @unique @map("donation_id") @db.Uuid
+  /// Generado a partir de una SEQUENCE de Postgres (finance.donation_receipt_seq),
+  /// no de un stored procedure — ver ARCHITECTURE.md §C.6.
+  receiptNumber   String   @unique @default(dbgenerated("finance.next_donation_receipt_number()")) @map("receipt_number") @db.VarChar(40)
+  issuedAt        DateTime @default(now()) @map("issued_at") @db.Timestamptz(6)
+  pdfMediaAssetId String?  @map("pdf_media_asset_id") @db.Uuid
+  taxIdSnapshot   String?  @map("tax_id_snapshot") @db.VarChar(40)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donation Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+
+  @@map("donation_receipt")
+  @@schema("finance")
+}
+
+model PaymentProvider {
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code     String  @unique @db.VarChar(40)
+  name     String  @db.VarChar(120)
+  isActive Boolean @default(true) @map("is_active")
+
+  transactions PaymentTransaction[]
+
+  @@map("payment_provider")
+  @@schema("finance")
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+
+  @@map("payment_transaction_status")
+  @@schema("finance")
+}
+
+/// Idempotencia: UNIQUE(providerId, externalTransactionId) impide procesar
+/// dos veces el mismo webhook del proveedor de pago. Inmutable tras crearse
+/// (trigger de solo-INSERT/UPDATE-de-estado en migración raw SQL).
+model PaymentTransaction {
+  id                    String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  donationId            String                   @map("donation_id") @db.Uuid
+  providerId            String                   @map("provider_id") @db.Uuid
+  externalTransactionId String?                  @map("external_transaction_id") @db.VarChar(120)
+  status                PaymentTransactionStatus @default(PENDING)
+  amount                Decimal                  @db.Decimal(14, 2)
+  currency              String                   @default("COP") @db.Char(3)
+  paymentMethodType     String?                  @map("payment_method_type") @db.VarChar(60)
+  paidAt                DateTime?                @map("paid_at") @db.Timestamptz(6)
+  metadata              Json?
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donation Donation        @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  provider PaymentProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@unique([providerId, externalTransactionId])
+  @@index([donationId])
+  @@map("payment_transaction")
+  @@schema("finance")
+}
+
+enum FinancialCategoryType {
+  INCOME
+  EXPENSE
+
+  @@map("financial_category_type")
+  @@schema("finance")
+}
+
+model FinancialCategory {
+  id        String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name      String                @db.VarChar(120)
+  type      FinancialCategoryType
+  parentId  String?               @map("parent_id") @db.Uuid
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  parent       FinancialCategory?     @relation("FinancialCategoryToParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children     FinancialCategory[]    @relation("FinancialCategoryToParent")
+  transactions FinancialTransaction[]
+
+  @@map("financial_category")
+  @@schema("finance")
+}
+
+/// Ledger append-only: nunca se hace UPDATE/DELETE (revocado a nivel de rol
+/// de BD, trigger de refuerzo en migración raw SQL). Las correcciones son
+/// asientos nuevos que compensan al anterior vía reversalOfTransactionId.
+model FinancialTransaction {
+  id                      String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  categoryId              String                @map("category_id") @db.Uuid
+  type                    FinancialCategoryType
+  amount                  Decimal               @db.Decimal(14, 2)
+  currency                String                @default("COP") @db.Char(3)
+  description             String?               @db.Text
+  relatedDonationId       String?               @map("related_donation_id") @db.Uuid
+  relatedCampaignId       String?               @map("related_campaign_id") @db.Uuid
+  occurredAt              DateTime              @map("occurred_at") @db.Date
+  createdByUserId         String?               @map("created_by_user_id") @db.Uuid
+  reversalOfTransactionId String?               @map("reversal_of_transaction_id") @db.Uuid
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  category   FinancialCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  reversalOf FinancialTransaction?  @relation("FinancialTransactionReversal", fields: [reversalOfTransactionId], references: [id], onDelete: SetNull)
+  reversedBy FinancialTransaction[] @relation("FinancialTransactionReversal")
+
+  @@index([categoryId])
+  @@index([occurredAt])
+  @@index([relatedCampaignId])
+  @@map("financial_transaction")
+  @@schema("finance")
+}
+
+/// Snapshot de un periodo (no una vista en vivo): la transparencia pública
+/// muestra un corte fijo "a fecha X" que no cambia retroactivamente aunque
+/// nuevas donaciones lleguen después de publicarlo.
+model FinancialReport {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  campaignId        String?  @map("campaign_id") @db.Uuid
+  periodStart       DateTime @map("period_start") @db.Date
+  periodEnd         DateTime @map("period_end") @db.Date
+  totalIncome       Decimal  @map("total_income") @db.Decimal(14, 2)
+  totalExpense      Decimal  @map("total_expense") @db.Decimal(14, 2)
+  generatedAt       DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+  generatedByUserId String?  @map("generated_by_user_id") @db.Uuid
+
+  @@index([campaignId])
+  @@map("financial_report")
+  @@schema("finance")
+}

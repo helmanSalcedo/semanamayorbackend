@@ -1,0 +1,156 @@
+/// Catálogo administrable de tipos de rol cultural (síndico, carguero, etc.).
+/// No es un enum porque este conjunto crece con el tiempo y varía por festividad.
+model RoleType {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code        String   @unique @db.VarChar(60)
+  name        String   @db.VarChar(120)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  assignments PersonRoleAssignment[]
+
+  @@map("role_type")
+  @@schema("heritage")
+}
+
+/// Persona física. Cubre tanto actores operativos (síndico activo, fotógrafo)
+/// como figuras exclusivamente históricas (biographyText + content_source),
+/// evitando una tabla `historical_person` duplicada — ver ARCHITECTURE.md §C.3.
+model Person {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  firstName        String?   @map("first_name") @db.VarChar(100)
+  lastName         String?   @map("last_name") @db.VarChar(100)
+  /// Nombre a mostrar cuando no aplica separar nombre/apellido (personajes
+  /// históricos documentados solo por un nombre de archivo, alias, etc.)
+  displayName      String    @map("display_name") @db.VarChar(200)
+  birthDate        DateTime? @map("birth_date") @db.Date
+  deathDate        DateTime? @map("death_date") @db.Date
+  biographyText    String?   @map("biography_text") @db.Text
+  isHistoricalOnly Boolean   @default(false) @map("is_historical_only")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  roleAssignments PersonRoleAssignment[]
+  familyMembers   FamilyPerson[]
+  donations       Donation[]
+
+  @@index([lastName, firstName])
+  @@map("person")
+  @@schema("heritage")
+}
+
+model Family {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name        String    @db.VarChar(160)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  members FamilyPerson[]
+
+  @@map("family")
+  @@schema("heritage")
+}
+
+/// Nunca se asume parentesco sin fuente: sourceId queda disponible aunque
+/// sea opcional a nivel de columna (se exige a nivel de aplicación al crear
+/// el registro, documentado en HISTORICAL_MODEL.md).
+model FamilyPerson {
+  id               String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  familyId         String   @map("family_id") @db.Uuid
+  personId         String   @map("person_id") @db.Uuid
+  relationshipNote String?  @map("relationship_note") @db.VarChar(200)
+  sourceId         String?  @map("source_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  family Family  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  person Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  source Source? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@unique([familyId, personId])
+  @@index([personId])
+  @@map("family_person")
+  @@schema("heritage")
+}
+
+/// A qué tipo de entidad puede estar vinculado un rol de persona.
+/// Polimorfismo sin FK físico (subjectType/subjectId), integridad
+/// garantizada por trigger — ver ARCHITECTURE.md §J.1.
+enum RoleSubjectType {
+  PROCESSIONAL_STEP
+  FESTIVAL
+  FESTIVAL_EDITION
+  EVENT
+  HISTORICAL_EVENT
+  RELIGIOUS_SITE
+
+  @@map("role_subject_type")
+  @@schema("heritage")
+}
+
+/// "Esta persona fue síndico del Paso X entre 2015 y 2019" — unifica lo que
+/// el spec original pedía como step_person/festival_person/event_person/
+/// historical_person en una sola tabla genérica con rango de fechas y fuente.
+model PersonRoleAssignment {
+  id          String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  personId    String          @map("person_id") @db.Uuid
+  roleTypeId  String          @map("role_type_id") @db.Uuid
+  subjectType RoleSubjectType @map("subject_type")
+  subjectId   String          @map("subject_id") @db.Uuid
+  startDate   DateTime?       @map("start_date") @db.Date
+  endDate     DateTime?       @map("end_date") @db.Date
+  notes       String?         @db.Text
+  sourceId    String?         @map("source_id") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  person   Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  roleType RoleType @relation(fields: [roleTypeId], references: [id], onDelete: Restrict)
+  source   Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([subjectType, subjectId])
+  @@index([personId])
+  @@map("person_role_assignment")
+  @@schema("heritage")
+}
+
+enum ReligiousSiteType {
+  IGLESIA
+  CAPILLA
+  PARROQUIA
+  CEMENTERIO
+  CONVENTO
+  SITIO_HISTORICO
+  PLAZA
+  OTRO
+
+  @@map("religious_site_type")
+  @@schema("heritage")
+}
+
+/// Cubre también "lugares históricos" (type = SITIO_HISTORICO) — evita la
+/// tabla `historical_place` duplicada del spec original.
+model ReligiousSite {
+  id             String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  municipalityId String            @map("municipality_id") @db.Uuid
+  type           ReligiousSiteType
+  name           String            @db.VarChar(160)
+  slug           String            @unique @db.VarChar(180)
+  address        String?           @db.VarChar(255)
+  latitude       Decimal?          @db.Decimal(9, 6)
+  longitude      Decimal?          @db.Decimal(9, 6)
+  description    String?           @db.Text
+  history        String?           @db.Text
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)
+
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  events       Event[]
+
+  @@index([municipalityId])
+  @@map("religious_site")
+  @@schema("heritage")
+}

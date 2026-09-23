@@ -1,0 +1,95 @@
+enum ArticleStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+
+  @@map("article_status")
+  @@schema("cms")
+}
+
+model ArticleCategory {
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name        String  @db.VarChar(120)
+  slug        String  @unique @db.VarChar(140)
+  description String? @db.Text
+
+  articles Article[]
+
+  @@map("article_category")
+  @@schema("cms")
+}
+
+model Tag {
+  id   String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name String @db.VarChar(80)
+  slug String @unique @db.VarChar(100)
+
+  articles ArticleTag[]
+
+  @@map("tag")
+  @@schema("cms")
+}
+
+/// Noticias/comunicados. Campos SEO reutilizables directamente en la tabla
+/// (no se creó una tabla "seo_meta" genérica: solo esta entidad la necesita
+/// hoy — ARCHITECTURE.md §41).
+model Article {
+  id                      String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalId              String?       @map("festival_id") @db.Uuid
+  categoryId              String?       @map("category_id") @db.Uuid
+  authorUserId            String?       @map("author_user_id") @db.Uuid
+  title                   String        @db.VarChar(220)
+  slug                    String        @unique @db.VarChar(240)
+  excerpt                 String?       @db.VarChar(400)
+  content                 String        @db.Text
+  status                  ArticleStatus @default(DRAFT)
+  publishedAt             DateTime?     @map("published_at") @db.Timestamptz(6)
+  coverMediaAssetId       String?       @map("cover_media_asset_id") @db.Uuid
+  metaTitle               String?       @map("meta_title") @db.VarChar(70)
+  metaDescription         String?       @map("meta_description") @db.VarChar(160)
+  canonicalUrl            String?       @map("canonical_url") @db.VarChar(500)
+  socialImageMediaAssetId String?       @map("social_image_media_asset_id") @db.Uuid
+  createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt               DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  festival Festival?        @relation(fields: [festivalId], references: [id], onDelete: SetNull)
+  category ArticleCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags     ArticleTag[]
+  versions ArticleVersion[]
+
+  @@index([festivalId])
+  @@index([status, publishedAt])
+  @@map("article")
+  @@schema("cms")
+}
+
+model ArticleVersion {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  articleId      String   @map("article_id") @db.Uuid
+  versionNumber  Int      @map("version_number") @db.SmallInt
+  editedByUserId String?  @map("edited_by_user_id") @db.Uuid
+  title          String   @db.VarChar(220)
+  content        String   @db.Text
+  changeSummary  String?  @map("change_summary") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, versionNumber])
+  @@map("article_version")
+  @@schema("cms")
+}
+
+model ArticleTag {
+  articleId String @map("article_id") @db.Uuid
+  tagId     String @map("tag_id") @db.Uuid
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@map("article_tag")
+  @@schema("cms")
+}

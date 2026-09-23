@@ -1,0 +1,36 @@
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PUBLISH
+  UNPUBLISH
+  PAYMENT
+  REFUND
+  OTHER
+
+  @@map("audit_action")
+  @@schema("audit")
+}
+
+/// Escrito automáticamente por trigger en tablas de finance/donaciones
+/// (obligatorio, sin excepción), y desde el backend para eventos de
+/// aplicación (login/logout, publish/unpublish) — ver docs/database/AUDIT.md.
+model AuditLog {
+  id         String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String?     @map("user_id") @db.Uuid
+  action     AuditAction
+  entityType String      @map("entity_type") @db.VarChar(80)
+  entityId   String?     @map("entity_id") @db.Uuid
+  oldValues  Json?       @map("old_values")
+  newValues  Json?       @map("new_values")
+  ipAddress  String?     @map("ip_address") @db.VarChar(45)
+  userAgent  String?     @map("user_agent") @db.Text
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@map("audit_log")
+  @@schema("audit")
+}

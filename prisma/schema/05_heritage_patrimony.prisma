@@ -1,0 +1,270 @@
+enum ConservationStatus {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  IN_RESTORATION
+
+  @@map("conservation_status")
+  @@schema("heritage")
+}
+
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("publication_status")
+  @@schema("heritage")
+}
+
+model ProcessionalStep {
+  id                  String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalId          String             @map("festival_id") @db.Uuid
+  name                String             @db.VarChar(160)
+  slug                String             @db.VarChar(180)
+  description         String?            @db.Text
+  historyText         String?            @map("history_text") @db.Text
+  originYear          Int?               @map("origin_year") @db.SmallInt
+  provenance          String?            @db.VarChar(255)
+  conservationStatus  ConservationStatus @default(GOOD) @map("conservation_status")
+  incorporatedAt      DateTime?          @map("incorporated_at") @db.Date
+  processionalOrder   Int?               @map("processional_order") @db.SmallInt
+  /// Denormalización intencional para listados rápidos; la relación completa
+  /// vive en media.MediaAttachment (role=PRIMARY). Ver ARCHITECTURE.md §16.
+  primaryMediaAssetId String?            @map("primary_media_asset_id") @db.Uuid
+  status              PublicationStatus  @default(DRAFT)
+  metadata            Json?
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz(6)
+
+  festival        Festival         @relation(fields: [festivalId], references: [id], onDelete: Restrict)
+  religiousImages ReligiousImage[]
+  processionSteps ProcessionStep[]
+  eventSteps      EventStep[]
+
+  @@unique([festivalId, slug])
+  @@index([festivalId])
+  @@map("processional_step")
+  @@schema("heritage")
+}
+
+model ReligiousImage {
+  id                 String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  processionalStepId String             @map("processional_step_id") @db.Uuid
+  name               String             @db.VarChar(160)
+  description        String?            @db.Text
+  author             String?            @db.VarChar(160)
+  sculptor           String?            @db.VarChar(160)
+  provenance         String?            @db.VarChar(255)
+  /// Fechas históricas suelen ser aproximadas — se guarda el año estimado
+  /// más una nota de precisión en vez de forzar una fecha exacta ficticia.
+  approxYear         Int?               @map("approx_year") @db.SmallInt
+  dateNote           String?            @map("date_note") @db.VarChar(160)
+  material           String?            @db.VarChar(160)
+  dimensions         String?            @db.VarChar(160)
+  weightKg           Decimal?           @map("weight_kg") @db.Decimal(6, 2)
+  conservationStatus ConservationStatus @default(GOOD) @map("conservation_status")
+  restorationsNote   String?            @map("restorations_note") @db.Text
+  location           String?            @db.VarChar(255)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime?          @map("deleted_at") @db.Timestamptz(6)
+
+  processionalStep ProcessionalStep @relation(fields: [processionalStepId], references: [id], onDelete: Cascade)
+
+  @@index([processionalStepId])
+  @@map("religious_image")
+  @@schema("heritage")
+}
+
+model HistoricalPeriod {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name        String   @db.VarChar(160)
+  slug        String   @unique @db.VarChar(180)
+  startYear   Int?     @map("start_year") @db.SmallInt
+  endYear     Int?     @map("end_year") @db.SmallInt
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  events HistoricalEvent[]
+
+  @@map("historical_period")
+  @@schema("heritage")
+}
+
+enum DatePrecision {
+  EXACT
+  YEAR
+  DECADE
+  CIRCA
+  UNKNOWN
+
+  @@map("date_precision")
+  @@schema("heritage")
+}
+
+enum HistoricalReliability {
+  VERIFIED
+  PROBABLE
+  DISPUTED
+  LEGENDARY
+
+  @@map("historical_reliability")
+  @@schema("heritage")
+}
+
+/// Hecho histórico discreto. Cubre lo que el spec llamaba `historical_event`;
+/// `historical_document`/`historical_reference` se resuelven con media.Document
+/// y heritage.ContentSource+Source respectivamente (ARCHITECTURE.md §C.3).
+model HistoricalEvent {
+  id               String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalId       String?               @map("festival_id") @db.Uuid
+  periodId         String?               @map("period_id") @db.Uuid
+  title            String                @db.VarChar(200)
+  slug             String                @unique @db.VarChar(220)
+  eventDate        DateTime?             @map("event_date") @db.Date
+  datePrecision    DatePrecision         @default(UNKNOWN) @map("date_precision")
+  description      String?               @db.Text
+  content          String?               @db.Text
+  reliabilityLevel HistoricalReliability @default(PROBABLE) @map("reliability_level")
+  editorialNotes   String?               @map("editorial_notes") @db.Text
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?             @map("deleted_at") @db.Timestamptz(6)
+
+  festival Festival?         @relation(fields: [festivalId], references: [id], onDelete: SetNull)
+  period   HistoricalPeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
+
+  @@index([festivalId])
+  @@index([periodId])
+  @@map("historical_event")
+  @@schema("heritage")
+}
+
+enum SourceType {
+  BOOK
+  NEWSPAPER
+  ACTA
+  PHOTO
+  INSTITUTIONAL_DOC
+  MANUSCRIPT
+  ARCHIVE
+  WEBSITE
+  ORAL_TESTIMONY
+  OTHER
+
+  @@map("source_type")
+  @@schema("heritage")
+}
+
+model Source {
+  id               String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title            String     @db.VarChar(255)
+  author           String?    @db.VarChar(200)
+  publisher        String?    @db.VarChar(200)
+  publicationDate  DateTime?  @map("publication_date") @db.Date
+  url              String?    @db.VarChar(500)
+  isbn             String?    @db.VarChar(20)
+  archiveReference String?    @map("archive_reference") @db.VarChar(200)
+  sourceType       SourceType @map("source_type")
+  reliabilityNotes String?    @map("reliability_notes") @db.Text
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  citations       ContentSource[]
+  familyLinks     FamilyPerson[]
+  roleAssignments PersonRoleAssignment[]
+  documents       Document[]
+
+  @@map("source")
+  @@schema("heritage")
+}
+
+/// A qué puede citar una fuente. Polimórfico sin FK físico, trigger-validado.
+enum SourceableType {
+  HISTORICAL_EVENT
+  PERSON
+  PROCESSIONAL_STEP
+  RELIGIOUS_IMAGE
+  EVENT
+  RELIGIOUS_SITE
+  DOCUMENT
+  FAMILY
+
+  @@map("sourceable_type")
+  @@schema("heritage")
+}
+
+model ContentSource {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  sourceId       String         @map("source_id") @db.Uuid
+  sourceableType SourceableType @map("sourceable_type")
+  sourceableId   String         @map("sourceable_id") @db.Uuid
+  citationNote   String?        @map("citation_note") @db.Text
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceableType, sourceableId])
+  @@index([sourceId])
+  @@map("content_source")
+  @@schema("heritage")
+}
+
+enum RightsSubjectType {
+  MEDIA_ASSET
+  PROCESSIONAL_STEP
+  RELIGIOUS_IMAGE
+  DOCUMENT
+
+  @@map("rights_subject_type")
+  @@schema("heritage")
+}
+
+enum RightsType {
+  OWNED
+  LICENSED
+  PUBLIC_DOMAIN
+  PERMISSION_GRANTED
+  UNKNOWN_PENDING_VERIFICATION
+
+  @@map("rights_type")
+  @@schema("heritage")
+}
+
+enum RightsPermissionStatus {
+  PENDING
+  GRANTED
+  DENIED
+  NOT_REQUIRED
+
+  @@map("rights_permission_status")
+  @@schema("heritage")
+}
+
+/// Trazabilidad de derechos de patrimonio (sección 58/59 del spec). Nunca se
+/// asume que un archivo encontrado en internet puede reutilizarse: el estado
+/// por defecto es "pendiente de verificar".
+model ContentRights {
+  id                  String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  subjectType         RightsSubjectType      @map("subject_type")
+  subjectId           String                 @map("subject_id") @db.Uuid
+  owner               String?                @db.VarChar(200)
+  custodian           String?                @db.VarChar(200)
+  rightsType          RightsType             @default(UNKNOWN_PENDING_VERIFICATION) @map("rights_type")
+  license             String?                @db.VarChar(160)
+  permissionStatus    RightsPermissionStatus @default(PENDING) @map("permission_status")
+  permissionGrantedAt DateTime?              @map("permission_granted_at") @db.Date
+  sourceText          String?                @map("source_text") @db.VarChar(255)
+  restrictionsNote    String?                @map("restrictions_note") @db.Text
+  notes               String?                @db.Text
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([subjectType, subjectId])
+  @@map("content_rights")
+  @@schema("heritage")
+}

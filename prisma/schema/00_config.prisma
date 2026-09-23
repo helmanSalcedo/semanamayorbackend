@@ -1,0 +1,17 @@
+// Semana Santa de Timbío — plataforma cultural/religiosa multi-festividad
+// Ver docs/database/ARCHITECTURE.md para el razonamiento detrás de cada decisión.
+//
+// El schema físico está partido en múltiples archivos bajo prisma/schema/
+// (feature "prismaSchemaFolder") y usa múltiples schemas de Postgres
+// (feature "multiSchema") para separar los dominios: geo, heritage,
+// operations, media, cms, finance, business, auth, audit.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["geo", "heritage", "operations", "media", "cms", "finance", "business", "auth", "audit"]
+}

@@ -1,0 +1,292 @@
+model OrganizationType {
+  id   String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  code String @unique @db.VarChar(40)
+  name String @db.VarChar(120)
+
+  organizations Organization[]
+
+  @@map("organization_type")
+  @@schema("business")
+}
+
+/// Cualquier entidad legal que pueda patrocinar/donar/participar (empresa,
+/// institución, medio, persona natural actuando como patrocinador).
+model Organization {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  typeId           String    @map("type_id") @db.Uuid
+  name             String    @db.VarChar(200)
+  taxId            String?   @map("tax_id") @db.VarChar(40)
+  contactEmail     String?   @map("contact_email") @db.VarChar(180)
+  contactPhone     String?   @map("contact_phone") @db.VarChar(30)
+  website          String?   @db.VarChar(255)
+  logoMediaAssetId String?   @map("logo_media_asset_id") @db.Uuid
+  description      String?   @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  type               OrganizationType        @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  sponsorships       Sponsorship[]
+  businesses         Business[]
+  eventOrganizations EventOrganization[]
+  adCampaigns        AdvertisementCampaign[]
+
+  @@index([typeId])
+  @@map("organization")
+  @@schema("business")
+}
+
+model SponsorshipPackage {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name        String   @db.VarChar(160)
+  description String?  @db.Text
+  price       Decimal? @db.Decimal(14, 2)
+  currency    String   @default("COP") @db.Char(3)
+  benefits    Json?
+
+  sponsorships Sponsorship[]
+
+  @@map("sponsorship_package")
+  @@schema("business")
+}
+
+/// A qué puede patrocinar una organización. Polimórfico sin FK física,
+/// trigger-validado — ver ARCHITECTURE.md §J.1.
+enum SponsorableType {
+  FESTIVAL
+  FESTIVAL_EDITION
+  EVENT
+  PROCESSIONAL_STEP
+  DONATION_CAMPAIGN
+
+  @@map("sponsorable_type")
+  @@schema("business")
+}
+
+enum SponsorshipStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+
+  @@map("sponsorship_status")
+  @@schema("business")
+}
+
+model Sponsorship {
+  id              String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  sponsorableType SponsorableType   @map("sponsorable_type")
+  sponsorableId   String            @map("sponsorable_id") @db.Uuid
+  packageId       String?           @map("package_id") @db.Uuid
+  campaignId      String?           @map("campaign_id") @db.Uuid
+  amount          Decimal?          @db.Decimal(14, 2)
+  currency        String            @default("COP") @db.Char(3)
+  startDate       DateTime          @map("start_date") @db.Date
+  endDate         DateTime?         @map("end_date") @db.Date
+  status          SponsorshipStatus @default(PENDING)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  package      SponsorshipPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  campaign     DonationCampaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([sponsorableType, sponsorableId])
+  @@index([organizationId])
+  @@map("sponsorship")
+  @@schema("business")
+}
+
+model BusinessCategory {
+  id   String @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name String @db.VarChar(120)
+  slug String @unique @db.VarChar(140)
+
+  businesses Business[]
+
+  @@map("business_category")
+  @@schema("business")
+}
+
+enum BusinessStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_REVIEW
+
+  @@map("business_status")
+  @@schema("business")
+}
+
+/// Directorio comercial. Separado de Organization (que es el actor legal que
+/// patrocina) con FK opcional para cuando el mismo negocio hace ambas cosas —
+/// ver ARCHITECTURE.md §C.5.
+model Business {
+  id               String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId   String?        @map("organization_id") @db.Uuid
+  categoryId       String         @map("category_id") @db.Uuid
+  name             String         @db.VarChar(200)
+  slug             String         @unique @db.VarChar(220)
+  description      String?        @db.Text
+  logoMediaAssetId String?        @map("logo_media_asset_id") @db.Uuid
+  status           BusinessStatus @default(PENDING_REVIEW)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  category      BusinessCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  locations     BusinessLocation[]
+  contacts      BusinessContact[]
+  subscriptions BusinessSubscription[]
+
+  @@index([categoryId])
+  @@map("business")
+  @@schema("business")
+}
+
+model BusinessLocation {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  businessId     String   @map("business_id") @db.Uuid
+  municipalityId String   @map("municipality_id") @db.Uuid
+  address        String   @db.VarChar(255)
+  latitude       Decimal? @db.Decimal(9, 6)
+  longitude      Decimal? @db.Decimal(9, 6)
+
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+
+  @@index([businessId])
+  @@index([municipalityId])
+  @@map("business_location")
+  @@schema("business")
+}
+
+enum BusinessContactType {
+  PHONE
+  WHATSAPP
+  EMAIL
+  WEBSITE
+  INSTAGRAM
+  FACEBOOK
+  OTHER
+
+  @@map("business_contact_type")
+  @@schema("business")
+}
+
+model BusinessContact {
+  id         String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  businessId String              @map("business_id") @db.Uuid
+  type       BusinessContactType
+  value      String              @db.VarChar(255)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("business_contact")
+  @@schema("business")
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+
+  @@map("subscription_plan")
+  @@schema("business")
+}
+
+enum BusinessSubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+
+  @@map("business_subscription_status")
+  @@schema("business")
+}
+
+model BusinessSubscription {
+  id         String                     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  businessId String                     @map("business_id") @db.Uuid
+  plan       SubscriptionPlan           @default(FREE)
+  startDate  DateTime                   @map("start_date") @db.Date
+  endDate    DateTime?                  @map("end_date") @db.Date
+  status     BusinessSubscriptionStatus @default(ACTIVE)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("business_subscription")
+  @@schema("business")
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+
+  @@map("campaign_status")
+  @@schema("business")
+}
+
+model AdvertisementCampaign {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String         @db.VarChar(160)
+  budget         Decimal?       @db.Decimal(14, 2)
+  currency       String         @default("COP") @db.Char(3)
+  startDate      DateTime       @map("start_date") @db.Date
+  endDate        DateTime?      @map("end_date") @db.Date
+  status         CampaignStatus @default(DRAFT)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ads          Advertisement[]
+
+  @@index([organizationId])
+  @@map("advertisement_campaign")
+  @@schema("business")
+}
+
+enum AdvertisementType {
+  BANNER
+  SPONSORSHIP
+  FEATURED
+  SPONSORED_POST
+
+  @@map("advertisement_type")
+  @@schema("business")
+}
+
+model Advertisement {
+  id                   String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  campaignId           String            @map("campaign_id") @db.Uuid
+  type                 AdvertisementType
+  creativeMediaAssetId String?           @map("creative_media_asset_id") @db.Uuid
+  targetUrl            String?           @map("target_url") @db.VarChar(500)
+  status               CampaignStatus    @default(DRAFT)
+
+  campaign   AdvertisementCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  placements AdvertisementPlacement[]
+
+  @@index([campaignId])
+  @@map("advertisement")
+  @@schema("business")
+}
+
+model AdvertisementPlacement {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  advertisementId String    @map("advertisement_id") @db.Uuid
+  placementZone   String    @map("placement_zone") @db.VarChar(80)
+  startDate       DateTime  @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
+  impressions     BigInt    @default(0)
+  clicks          BigInt    @default(0)
+
+  advertisement Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+
+  @@index([advertisementId])
+  @@map("advertisement_placement")
+  @@schema("business")
+}

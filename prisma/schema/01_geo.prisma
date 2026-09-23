@@ -1,0 +1,75 @@
+/// Jerarquía geográfica reutilizable por cualquier festividad/municipio futuro.
+model Country {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  isoCode2  String   @unique @map("iso_code_2") @db.Char(2)
+  isoCode3  String   @unique @map("iso_code_3") @db.Char(3)
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  departments Department[]
+
+  @@map("country")
+  @@schema("geo")
+}
+
+model Department {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  countryId String   @map("country_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  daneCode  String?  @map("dane_code") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  country        Country        @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  municipalities Municipality[]
+
+  @@unique([countryId, name])
+  @@index([countryId])
+  @@map("department")
+  @@schema("geo")
+}
+
+model Municipality {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  departmentId String   @map("department_id") @db.Uuid
+  name         String   @db.VarChar(120)
+  daneCode     String?  @map("dane_code") @db.VarChar(10)
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  department        Department         @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  localities        Locality[]
+  festivals         Festival[]
+  religiousSites    ReligiousSite[]
+  businessLocations BusinessLocation[]
+
+  @@unique([departmentId, name])
+  @@index([departmentId])
+  @@map("municipality")
+  @@schema("geo")
+}
+
+enum LocalityType {
+  BARRIO
+  VEREDA
+  CORREGIMIENTO
+  OTRO
+
+  @@map("locality_type")
+  @@schema("geo")
+}
+
+model Locality {
+  id             String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  municipalityId String       @map("municipality_id") @db.Uuid
+  name           String       @db.VarChar(120)
+  type           LocalityType @default(OTRO)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+
+  @@unique([municipalityId, name])
+  @@index([municipalityId])
+  @@map("locality")
+  @@schema("geo")
+}

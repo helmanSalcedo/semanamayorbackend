@@ -1,0 +1,73 @@
+enum FestivalStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@map("festival_status")
+  @@schema("heritage")
+}
+
+/// Una festividad cultural/religiosa genérica. Timbío/Semana Santa es la
+/// primera instancia, nunca un valor hardcodeado en el modelo.
+model Festival {
+  id                    String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  municipalityId        String         @map("municipality_id") @db.Uuid
+  name                  String         @db.VarChar(160)
+  slug                  String         @unique @db.VarChar(180)
+  shortDescription      String?        @map("short_description") @db.VarChar(280)
+  description           String?        @db.Text
+  historicalDescription String?        @map("historical_description") @db.Text
+  /// 1-12, mes aproximado de inicio/fin (ej. Semana Santa se mueve cada año)
+  startMonth            Int?           @map("start_month") @db.SmallInt
+  endMonth              Int?           @map("end_month") @db.SmallInt
+  status                FestivalStatus @default(DRAFT)
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  municipality      Municipality       @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  editions          FestivalEdition[]
+  processionalSteps ProcessionalStep[]
+  historicalEvents  HistoricalEvent[]
+  articles          Article[]
+  donationCampaigns DonationCampaign[]
+
+  @@index([municipalityId])
+  @@map("festival")
+  @@schema("heritage")
+}
+
+enum FestivalEditionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("festival_edition_status")
+  @@schema("heritage")
+}
+
+/// Instancia anual de una festividad (ej. "Semana Santa de Timbío 2027").
+model FestivalEdition {
+  id                 String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  festivalId         String                @map("festival_id") @db.Uuid
+  year               Int                   @db.SmallInt
+  name               String                @db.VarChar(160)
+  startDate          DateTime?             @map("start_date") @db.Date
+  endDate            DateTime?             @map("end_date") @db.Date
+  description        String?               @db.Text
+  officialProgramUrl String?               @map("official_program_url") @db.VarChar(500)
+  status             FestivalEditionStatus @default(PLANNED)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  festival    Festival     @relation(fields: [festivalId], references: [id], onDelete: Restrict)
+  processions Procession[]
+  events      Event[]
+  galleries   Gallery[]
+
+  @@unique([festivalId, year])
+  @@index([festivalId])
+  @@map("festival_edition")
+  @@schema("heritage")
+}

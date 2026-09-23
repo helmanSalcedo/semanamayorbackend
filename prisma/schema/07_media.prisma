@@ -1,0 +1,170 @@
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+
+  @@map("media_type")
+  @@schema("media")
+}
+
+/// Nunca se guarda el binario en la BD: solo referencia a storage externo
+/// (S3, R2, etc.) vía storageProvider/storageKey.
+model MediaAsset {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  type             MediaType
+  url              String    @db.VarChar(500)
+  storageProvider  String    @map("storage_provider") @db.VarChar(60)
+  storageKey       String    @map("storage_key") @db.VarChar(500)
+  filename         String    @db.VarChar(255)
+  mimeType         String    @map("mime_type") @db.VarChar(120)
+  sizeBytes        BigInt?   @map("size_bytes")
+  width            Int?
+  height           Int?
+  durationSeconds  Int?      @map("duration_seconds")
+  checksum         String?   @db.VarChar(128)
+  metadata         Json?
+  uploadedByUserId String?   @map("uploaded_by_user_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  attachments MediaAttachment[]
+  galleryUses GalleryItem[]
+  documents   Document[]
+
+  @@map("media_asset")
+  @@schema("media")
+}
+
+/// A qué tipo de entidad puede adjuntarse multimedia. Polimórfico sin FK
+/// física, integridad garantizada por trigger — ver ARCHITECTURE.md §J.1.
+enum AttachableType {
+  PROCESSIONAL_STEP
+  RELIGIOUS_IMAGE
+  EVENT
+  PERSON
+  ARTICLE
+  RELIGIOUS_SITE
+  FESTIVAL
+  DOCUMENT
+
+  @@map("attachable_type")
+  @@schema("media")
+}
+
+enum MediaAttachmentRole {
+  PRIMARY
+  GALLERY
+  THUMBNAIL
+  ATTACHMENT
+  COVER
+
+  @@map("media_attachment_role")
+  @@schema("media")
+}
+
+model MediaAttachment {
+  id             String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  mediaAssetId   String              @map("media_asset_id") @db.Uuid
+  attachableType AttachableType      @map("attachable_type")
+  attachableId   String              @map("attachable_id") @db.Uuid
+  role           MediaAttachmentRole @default(GALLERY)
+  order          Int                 @default(0) @db.SmallInt
+  caption        String?             @db.VarChar(255)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([attachableType, attachableId])
+  @@index([mediaAssetId])
+  @@map("media_attachment")
+  @@schema("media")
+}
+
+model Gallery {
+  id                String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name              String    @db.VarChar(160)
+  slug              String    @unique @db.VarChar(180)
+  description       String?   @db.Text
+  festivalEditionId String?   @map("festival_edition_id") @db.Uuid
+  coverMediaAssetId String?   @map("cover_media_asset_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  festivalEdition FestivalEdition? @relation(fields: [festivalEditionId], references: [id], onDelete: SetNull)
+  items           GalleryItem[]
+
+  @@index([festivalEditionId])
+  @@map("gallery")
+  @@schema("media")
+}
+
+model GalleryItem {
+  id           String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  galleryId    String  @map("gallery_id") @db.Uuid
+  mediaAssetId String  @map("media_asset_id") @db.Uuid
+  order        Int     @default(0) @db.SmallInt
+  caption      String? @db.VarChar(255)
+
+  gallery    Gallery    @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([galleryId, mediaAssetId])
+  @@map("gallery_item")
+  @@schema("media")
+}
+
+enum DocumentType {
+  BOOK
+  NEWSPAPER
+  ACTA
+  PHOTO
+  INSTITUTIONAL
+  PDF
+  MANUSCRIPT
+  ARCHIVE
+  OTHER
+
+  @@map("document_type")
+  @@schema("media")
+}
+
+/// Cubre lo que el spec llamaba `historical_document` (ARCHITECTURE.md §C.3).
+model Document {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title           String       @db.VarChar(255)
+  type            DocumentType
+  description     String?      @db.Text
+  publicationDate DateTime?    @map("publication_date") @db.Date
+  mediaAssetId    String?      @map("media_asset_id") @db.Uuid
+  sourceId        String?      @map("source_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?    @map("deleted_at") @db.Timestamptz(6)
+
+  mediaAsset MediaAsset?       @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  source     Source?           @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  versions   DocumentVersion[]
+
+  @@index([sourceId])
+  @@map("document")
+  @@schema("media")
+}
+
+model DocumentVersion {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  documentId      String   @map("document_id") @db.Uuid
+  versionNumber   Int      @map("version_number") @db.SmallInt
+  changedByUserId String?  @map("changed_by_user_id") @db.Uuid
+  changeSummary   String?  @map("change_summary") @db.VarChar(255)
+  snapshot        Json
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, versionNumber])
+  @@map("document_version")
+  @@schema("media")
+}
