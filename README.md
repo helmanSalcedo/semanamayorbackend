@@ -178,6 +178,25 @@ Valida en la capa de aplicación que la entidad exista antes de tocar la DB —
 espeja el trigger `media.validate_media_attachment_attachable` para devolver
 un 400 claro en vez de un 500 opaco si algo no cuadra.
 
+### Admin — usuarios, roles, permisos, auditoría (`/api/v1/{users,roles,permissions,audit-log}`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `GET /users` | `user.manage` | Lista usuarios (filtrable por `isActive`/`roleCode`), nunca incluye `passwordHash` |
+| `PATCH /users/:id` | `user.manage` | Actualiza nombre/teléfono/activo (no email/password — eso va por `/auth`) |
+| `POST /users/:id/roles` | `role.manage` | Asigna un rol (idempotente) |
+| `DELETE /users/:id/roles/:roleId` | `role.manage` | Revoca un rol |
+| `GET /roles`, `GET /permissions` | `role.manage` | Catálogos |
+| `POST /roles/:id/permissions` | `role.manage` | Asigna un permiso a un rol (rechaza tocar `SUPER_ADMIN`, que ya tiene todos por diseño) |
+| `GET /audit-log` | `audit_log.read` | Lee `audit.audit_log` (filtrable por entidad/usuario/acción) |
+
+Este es el panel administrativo que el seed dejaba pendiente ("el resto se
+asigna manualmente... cuando exista panel administrativo"). Verificado real:
+asignar `HISTORIAN` a un usuario, darle `source.manage` a ese rol, y
+confirmar que el usuario pudo crear una fuente después de volver a loguearse
+(el JWT se refresca con los permisos nuevos recién en el próximo login/refresh,
+no en caliente).
+
 ### Finance — donaciones (`/api/v1/donation-campaigns`, `/api/v1/donations`)
 
 | Endpoint | Permiso | Descripción |
