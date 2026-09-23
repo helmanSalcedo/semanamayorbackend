@@ -17,6 +17,12 @@ import { PeopleController } from './people.controller';
 import { PeopleService } from './people.service';
 import { PersonRoleAssignmentsController } from './person-role-assignments.controller';
 import { PersonRoleAssignmentsService } from './person-role-assignments.service';
+import { HistoricalPeriodsController } from './historical-periods.controller';
+import { HistoricalPeriodsService } from './historical-periods.service';
+import { HistoricalEventsController } from './historical-events.controller';
+import { HistoricalEventsService } from './historical-events.service';
+import { ContentRightsController } from './content-rights.controller';
+import { ContentRightsService } from './content-rights.service';
 
 @Module({
   controllers: [
@@ -29,6 +35,9 @@ import { PersonRoleAssignmentsService } from './person-role-assignments.service'
     ContentSourcesController,
     PeopleController,
     PersonRoleAssignmentsController,
+    HistoricalPeriodsController,
+    HistoricalEventsController,
+    ContentRightsController,
   ],
   providers: [
     FestivalsService,
@@ -40,6 +49,9 @@ import { PersonRoleAssignmentsService } from './person-role-assignments.service'
     ContentSourcesService,
     PeopleService,
     PersonRoleAssignmentsService,
+    HistoricalPeriodsService,
+    HistoricalEventsService,
+    ContentRightsService,
   ],
   exports: [
     FestivalsService,

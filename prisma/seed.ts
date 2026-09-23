@@ -85,6 +85,7 @@ async function seedRbac() {
     'source.manage',
     'person.manage',
     'donation_campaign.manage',
+    'historical_content.manage',
     'sponsorship.manage',
     'business.manage',
     'business.approve',

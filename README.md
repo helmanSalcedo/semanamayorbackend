@@ -178,6 +178,24 @@ Valida en la capa de aplicación que la entidad exista antes de tocar la DB —
 espeja el trigger `media.validate_media_attachment_attachable` para devolver
 un 400 claro en vez de un 500 opaco si algo no cuadra.
 
+### Histórico y derechos (`/api/v1/historical-periods`, `/api/v1/historical-events`, `/api/v1/content-rights`)
+
+Permiso `historical_content.manage` para periodos/hechos históricos,
+`source.manage` para derechos (mismo dominio documental que `Source`).
+
+- **`historical-periods`** — catálogo de periodos (ej. "Colonia"), sin
+  soft-delete en el schema (hard-delete; los hechos que lo referencian
+  quedan con `periodId = NULL`)
+- **`historical-events`** — hechos discretos, opcionalmente ligados a un
+  `Festival` y/o `HistoricalPeriod`, con `datePrecision`
+  (EXACT/YEAR/DECADE/CIRCA/UNKNOWN) y `reliabilityLevel`
+  (VERIFIED/PROBABLE/DISPUTED/LEGENDARY) — nunca se fuerza una fecha exacta
+  ficticia para un dato aproximado
+- **`content-rights`** — estado de derechos de uso de un archivo/patrimonio
+  (`MediaAsset`, `ProcessionalStep`, `ReligiousImage`, `Document`); por
+  defecto `UNKNOWN_PENDING_VERIFICATION` — nunca se asume que algo
+  encontrado puede reutilizarse sin verificar
+
 ### Admin — usuarios, roles, permisos, auditoría (`/api/v1/{users,roles,permissions,audit-log}`)
 
 | Endpoint | Permiso | Descripción |
