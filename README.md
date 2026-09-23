@@ -284,6 +284,27 @@ Puntos clave de este módulo:
 - **`POST /donations/:id/transactions` es un endpoint autenticado directo, no un webhook firmado del proveedor de pago** — eso todavía no existe. Simula el rol de un webhook (Wompi/PayU/ePayco) para poder probar el flujo de confirmación/reembolso automático mientras tanto.
 - Un `PaymentTransaction` con `status: SUCCEEDED` confirma la donación automáticamente (recibo incluido); `FAILED` la marca fallida si seguía `PENDING`; `REFUNDED` dispara el reembolso.
 
+### Finance — contabilidad interna (`/api/v1/financial-categories`, `/api/v1/financial-transactions`, `/api/v1/financial-reports`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /financial-categories` | `financial_category.manage` | Crea una categoría contable (`INCOME`/`EXPENSE`), opcionalmente con `parentId` para subcategorías |
+| `GET /financial-categories`, `GET /financial-categories/:id` | público | Catálogo de categorías |
+| `PATCH /financial-categories/:id` | `financial_category.manage` | Actualiza nombre/tipo/padre |
+| `DELETE /financial-categories/:id` | `financial_category.manage` | Elimina la categoría — falla con `409` si tiene transacciones asociadas (FK `RESTRICT`) |
+| `POST /financial-transactions` | `financial_transaction.manage` | Registra un asiento en el ledger (`categoryId`, `type`, `amount`, `occurredAt`, referencias opcionales a una donación o campaña) |
+| `GET /financial-transactions`, `GET /financial-transactions/:id` | `financial_transaction.manage` | Ledger interno — **no es público**, a diferencia de los reportes |
+| `POST /financial-transactions/:id/reverse` | `financial_transaction.manage` | Registra la reversa de un asiento como una entrada nueva de tipo opuesto, enlazada por `reversalOfTransactionId` |
+| `POST /financial-reports` | `financial_report.publish` | Genera un snapshot de transparencia (suma de ingresos/egresos) para un periodo y, opcionalmente, una campaña |
+| `GET /financial-reports`, `GET /financial-reports/:id` | **público** | Reportes de transparencia ya publicados |
+
+Puntos clave de este módulo:
+- **El ledger es append-only** — no existen `PATCH`/`DELETE` para `FinancialTransaction`. Un trigger de Postgres (`prevent_ledger_mutation`) bloquea cualquier `UPDATE`/`DELETE` directo; la única forma de "corregir" un asiento es `reverse()`, que crea una entrada nueva de tipo opuesto y el mismo monto. Verificado real contra Postgres: un `DELETE` manual de una transacción de prueba fue rechazado por el trigger.
+- **Doble reversa bloqueada**: `reverse()` revisa si ya existe una transacción con `reversalOfTransactionId` apuntando al asiento original y responde `400` si es así.
+- **Ledger interno vs. reportes públicos**: `FinancialTransaction` está completamente cerrado por permiso (incluidas las lecturas) porque es contabilidad interna; `FinancialReport` es de lectura pública porque es el corte fijo de transparencia que se publica hacia afuera — nunca una vista en vivo del ledger.
+- **Auditoría real**: igual que en donaciones, cada `$transaction` sobre el ledger llama a `setAuditActor()` (`src/finance/audit-actor.util.ts`) para que `audit.audit_log` registre quién hizo el asiento.
+- Al construir este módulo se detectó y corrigió un bug preexistente en el filtro global de excepciones (`src/common/filters/all-exceptions.filter.ts`): algunas violaciones de FK `RESTRICT` llegan como `PrismaClientUnknownRequestError` en vez de `P2003`, y devolvían `500` en lugar de `409`. Ahora se detecta el `SQLSTATE` (`23001`/`23503`) en el mensaje crudo de Postgres como respaldo.
+
 ### Media (`/api/v1/media`)
 
 | Endpoint | Permiso | Descripción |

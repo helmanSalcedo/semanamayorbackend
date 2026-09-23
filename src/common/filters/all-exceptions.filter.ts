@@ -84,6 +84,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
+    // Some Postgres FK RESTRICT violations surface as an unmapped
+    // PrismaClientUnknownRequestError (query engine can't classify them as
+    // P2003), so we fall back to reading the raw SQLSTATE from the message.
+    if (exception instanceof Prisma.PrismaClientUnknownRequestError) {
+      const sqlState = /code: "(\d{5})"/.exec(exception.message)?.[1];
+      if (sqlState === '23001' || sqlState === '23503') {
+        return {
+          status: HttpStatus.CONFLICT,
+          error: 'DatabaseError',
+          message: 'La operación viola una relación existente',
+        };
+      }
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       error: 'InternalServerError',

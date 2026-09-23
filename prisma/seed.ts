@@ -92,6 +92,8 @@ async function seedRbac() {
     'user.manage',
     'role.manage',
     'financial_report.publish',
+    'financial_category.manage',
+    'financial_transaction.manage',
     'audit_log.read',
   ];
 
