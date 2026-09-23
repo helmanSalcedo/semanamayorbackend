@@ -8,6 +8,14 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type { AppConfig } from './config/configuration';
 
+// Prisma maps SQL BIGINT to native BigInt, which JSON.stringify can't
+// serialize by default (throws "Do not know how to serialize a BigInt").
+(BigInt.prototype as unknown as { toJSON(): string }).toJSON = function (
+  this: bigint,
+): string {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 

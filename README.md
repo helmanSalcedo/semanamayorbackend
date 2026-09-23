@@ -305,6 +305,36 @@ Puntos clave de este módulo:
 - **Auditoría real**: igual que en donaciones, cada `$transaction` sobre el ledger llama a `setAuditActor()` (`src/finance/audit-actor.util.ts`) para que `audit.audit_log` registre quién hizo el asiento.
 - Al construir este módulo se detectó y corrigió un bug preexistente en el filtro global de excepciones (`src/common/filters/all-exceptions.filter.ts`): algunas violaciones de FK `RESTRICT` llegan como `PrismaClientUnknownRequestError` en vez de `P2003`, y devolvían `500` en lugar de `409`. Ahora se detecta el `SQLSTATE` (`23001`/`23503`) en el mensaje crudo de Postgres como respaldo.
 
+### Directorio, patrocinios y publicidad (`/api/v1/organizations`, `/sponsorship-packages`, `/sponsorships`, `/businesses`, `/advertisement-campaigns`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `GET /organization-types`, `GET /business-categories` | público | Catálogos seeded (empresa/institución/medio/persona natural; cafetería/hotel/restaurante/…) |
+| `POST /organizations` | `organization.manage` | Crea una organización (patrocinador/entidad legal) |
+| `GET /organizations`, `GET /organizations/:id` | público | Directorio de organizaciones |
+| `PATCH /organizations/:id`, `DELETE /organizations/:id` | `organization.manage` | Actualiza / soft-elimina una organización |
+| `POST /sponsorship-packages` | `sponsorship.manage` | Crea un paquete de patrocinio (precio, beneficios en JSON libre) |
+| `GET /sponsorship-packages`, `GET /sponsorship-packages/:id` | público | Catálogo de paquetes |
+| `POST /sponsorships` | `sponsorship.manage` | Registra el patrocinio de una organización sobre un `FESTIVAL`/`FESTIVAL_EDITION`/`EVENT`/`PROCESSIONAL_STEP`/`DONATION_CAMPAIGN` (validado contra la tabla real correspondiente) |
+| `GET /sponsorships` | público | Lista patrocinios, filtrable por `organizationId`/`sponsorableType`/`sponsorableId` |
+| `PATCH /sponsorships/:id/status`, `DELETE /sponsorships/:id` | `sponsorship.manage` | Cambia estado (`PENDING`/`ACTIVE`/`EXPIRED`/`CANCELLED`) o elimina |
+| `POST /businesses` | `business.manage` | Registra un negocio en el directorio (nace en `PENDING_REVIEW`) |
+| `GET /businesses` | público | Solo negocios en estado `ACTIVE` |
+| `GET /businesses/manage` | `business.manage` | Todos los estados (uso administrativo) — nota: esta ruta estática va **antes** de `:id` en el controlador para no ser capturada por él |
+| `PATCH /businesses/:id`, `DELETE /businesses/:id` | `business.manage` | Actualiza / soft-elimina |
+| `POST /businesses/:id/approve`, `POST /businesses/:id/reject` | `business.approve` | Pasa a `ACTIVE` o `INACTIVE` — separado de `business.manage` porque aprobar es una decisión editorial distinta de administrar los datos |
+| `POST/GET/DELETE /businesses/:businessId/locations` | `business.manage` (GET público) | Sedes de un negocio (municipio + dirección + coordenadas) |
+| `POST/GET/DELETE /businesses/:businessId/contacts` | `business.manage` (GET público) | Contactos (teléfono/WhatsApp/email/redes) |
+| `POST/GET /businesses/:businessId/subscriptions`, `PATCH .../:id/status` | `business.manage` | Plan de suscripción del negocio en el directorio (`FREE`/`BASIC`/`PREMIUM`) |
+| `POST/GET/PATCH/DELETE /advertisement-campaigns`, `/advertisement-campaigns/:campaignId/advertisements`, `/advertisements/:advertisementId/placements` | `advertisement.manage` | Campañas, anuncios y ubicaciones publicitarias — **todo interno**, no público, porque incluye presupuestos |
+| `POST /advertisement-placements/:id/impression`, `POST /advertisement-placements/:id/click` | **público** | Contadores atómicos (`increment`) para medir el desempeño de un anuncio; pensado para que el frontend los llame sin autenticación |
+
+Puntos clave de este módulo:
+- **Patrocinio polimórfico validado en la app**: igual que con `ContentSource`/`PersonRoleAssignment`, el servicio replica en un `switch` la misma validación que hace el trigger `business.validate_sponsorship_sponsorable` en Postgres, para devolver `400` claro en vez de un error crudo de base de datos.
+- **`business.manage` vs. `business.approve`**: crear/editar un negocio y aprobarlo son permisos distintos a propósito — un rol de "moderador de directorio" puede tener solo `business.approve`.
+- **Directorio público filtra por estado**: `GET /businesses` solo devuelve `ACTIVE`; el listado completo (incluidos `PENDING_REVIEW`/`INACTIVE`) vive en `GET /businesses/manage`, gateado por permiso.
+- **Bug real detectado y corregido durante la verificación con curl**: `AdvertisementPlacement.impressions`/`clicks` son `BigInt` en Postgres, y `JSON.stringify` no sabe serializar `BigInt` de forma nativa — cualquier respuesta que incluyera esos campos (o el `sizeBytes` preexistente de `MediaAsset`) habría lanzado `TypeError: Do not know how to serialize a BigInt`. Se corrigió de forma global en `src/main.ts` con un `BigInt.prototype.toJSON` que serializa a string.
+
 ### Media (`/api/v1/media`)
 
 | Endpoint | Permiso | Descripción |
