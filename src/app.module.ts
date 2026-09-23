@@ -14,6 +14,7 @@ import { HeritageModule } from './heritage/heritage.module';
 import { OperationsModule } from './operations/operations.module';
 import { FinanceModule } from './finance/finance.module';
 import { AdminModule } from './admin/admin.module';
+import { CmsModule } from './cms/cms.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -33,6 +34,7 @@ import { HealthModule } from './health/health.module';
     OperationsModule,
     FinanceModule,
     AdminModule,
+    CmsModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

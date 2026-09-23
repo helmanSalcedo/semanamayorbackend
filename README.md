@@ -181,6 +181,26 @@ media-attachments/content-sources/person-role-assignments):
   (`business`, Fase G — sin construir todavía): valida contra la tabla real
   y devuelve 400 claro mientras no exista el registro, verificado con curl
 
+### CMS — artículos (`/api/v1/articles`, `/api/v1/article-categories`, `/api/v1/tags`)
+
+Permiso `article.create` para categorías/tags/artículos, `article.publish`/
+`article.unpublish` para las transiciones de estado.
+
+- **`GET /articles`** (público) y **`GET /articles/:id`** (público): **solo
+  `PUBLISHED`**, siempre — un draft nunca es visible ni siquiera conociendo
+  su id directo. Verificado real: 404 antes de publicar, 200 después,
+  404 de nuevo tras despublicar.
+- **`GET /articles/manage`** / **`GET /articles/:id/manage`**: vista
+  editorial con todos los estados (`article.create`)
+- **`POST /articles/:id/publish`** / **`.../unpublish`**: transición de
+  estado, separada del `PATCH` general
+- **`PATCH /articles/:id`**: guarda automáticamente título+contenido
+  anteriores en `GET /articles/:id/versions` antes de aplicar el cambio
+  (mismo patrón que `Document`) — verificado con curl, el historial
+  conservó el contenido original tras la corrección
+- `tagIds` en create/update reemplaza los vínculos con `Tag` completos (no
+  hace diff incremental)
+
 ### Galerías y documentos (`/api/v1/galleries`, `/api/v1/documents`)
 
 Permiso `media_asset.manage` para galerías, `source.manage` para documentos.
