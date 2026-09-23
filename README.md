@@ -166,6 +166,21 @@ Ambos con CRUD completo, slug autogenerado en `Event`, soft-delete, y
 validación de pertenencia a la festividad/edición del path. Las horas
 (`startTime`/`estimatedEndTime` de `Procession`) se envían como `"HH:mm"`.
 
+**Relacional de operations** (permiso `procession.manage` / `event.manage`,
+solo create+list+remove, sin PATCH, siguiendo el mismo patrón que
+media-attachments/content-sources/person-role-assignments):
+
+- `.../processions/:processionId/steps` — orden de pasos procesionales
+  dentro de una procesión (`order` único por procesión)
+- `.../processions/:processionId/routes` (+ `/:routeId/points`) — recorrido
+  con puntos lat/lng, ordenados
+- `.../events/:eventId/steps` — pasos procesionales que participan en un
+  evento
+- `.../events/:eventId/organizations` — organizaciones vinculadas a un
+  evento (patrocinador, organizador). Depende de `Organization`
+  (`business`, Fase G — sin construir todavía): valida contra la tabla real
+  y devuelve 400 claro mientras no exista el registro, verificado con curl
+
 ### Galerías y documentos (`/api/v1/galleries`, `/api/v1/documents`)
 
 Permiso `media_asset.manage` para galerías, `source.manage` para documentos.
