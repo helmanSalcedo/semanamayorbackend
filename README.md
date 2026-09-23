@@ -11,12 +11,15 @@ el futuro sin quedar acoplado a Timbío.
 **Estado actual:** la base de datos está completa y en producción-ready.
 Sobre ella corre un backend NestJS con foundation profesional (config
 validada, Prisma, logging estructurado, manejo de errores, rate limiting,
-Swagger), autenticación/RBAC reales, media (Firebase Storage), y el dominio
-**heritage** + **operations** completo: festividades, ediciones, pasos
+Swagger), autenticación/RBAC reales, media (Firebase Storage), el dominio
+**heritage** + **operations** completo (festividades, ediciones, pasos
 procesionales, imágenes religiosas, sitios religiosos, personas y sus roles
-culturales, trazabilidad de fuentes documentales, eventos y procesiones.
-Sin tocar todavía: finanzas/donaciones, CMS/artículos, directorio comercial,
-ni frontend.
+culturales, trazabilidad de fuentes documentales, eventos y procesiones), y
+el flujo de **donaciones** (finance) con integridad financiera real: split
+de donaciones entre beneficiarios, confirmación/reembolso auditados,
+recibos automáticos, transacciones de pago idempotentes. Sin tocar todavía:
+contabilidad interna (ledger de gastos/ingresos, reportes de transparencia),
+CMS/artículos, directorio comercial, ni frontend.
 
 📖 **Empieza por [`docs/database/README.md`](./docs/database/README.md)**
 para la documentación completa de la arquitectura de datos (decisiones de
@@ -174,6 +177,27 @@ validación de pertenencia a la festividad/edición del path. Las horas
 Valida en la capa de aplicación que la entidad exista antes de tocar la DB —
 espeja el trigger `media.validate_media_attachment_attachable` para devolver
 un 400 claro en vez de un 500 opaco si algo no cuadra.
+
+### Finance — donaciones (`/api/v1/donation-campaigns`, `/api/v1/donations`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /donation-campaigns` | `donation_campaign.manage` | Crea una campaña de donación |
+| `GET /donation-campaigns` | público | Lista campañas |
+| `POST /donations` | **público** | Registra una intención de donación (estado `PENDING`) con sus `allocations` — no requiere cuenta, pensado para el donante |
+| `GET /donations`, `GET /donations/:id` | `donation.read` | Contienen PII del donante (nombre, email) — nunca públicos |
+| `GET /donations/:id/receipt` | `donation.read` | Recibo (solo existe si la donación está `CONFIRMED`) |
+| `POST /donations/:id/confirm` | `donation.create` | Confirma una donación `PENDING` (ej. pago manual verificado) y emite el recibo |
+| `POST /donations/:id/cancel` | `donation.create` | Cancela una donación `PENDING` |
+| `POST /donations/:id/refund` | `donation.refund` | Reembolsa una donación `CONFIRMED` |
+| `POST /donations/:id/transactions` | `donation.create` | Registra un intento/resultado de pago (idempotente por `providerCode`+`externalTransactionId`) |
+
+Puntos clave de este módulo:
+- **`allocations` debe sumar exactamente `amount`** — validado en la app antes de tocar la DB, y reforzado por un `CONSTRAINT TRIGGER DEFERRABLE` en Postgres como última línea de defensa.
+- **Nunca se hace `DELETE` físico** de `donation`/`payment_transaction`/`donation_receipt` — la DB lo bloquea con un trigger (`prevent_hard_delete`); los cambios de estado quedan en `donation_status_history`. Verificado real: un intento de borrar un recibo de prueba falló con el mensaje del trigger, tal como debía.
+- **Auditoría real**: antes de cada transacción que toca tablas financieras, el backend ejecuta `SELECT set_config('app.current_user_id', ...)` (`src/finance/audit-actor.util.ts`) para que `audit.audit_log` sepa quién hizo el cambio — confirmado con una donación pública (actor `NULL`) y una confirmación por un admin (actor con su `user_id`).
+- **`POST /donations/:id/transactions` es un endpoint autenticado directo, no un webhook firmado del proveedor de pago** — eso todavía no existe. Simula el rol de un webhook (Wompi/PayU/ePayco) para poder probar el flujo de confirmación/reembolso automático mientras tanto.
+- Un `PaymentTransaction` con `status: SUCCEEDED` confirma la donación automáticamente (recibo incluido); `FAILED` la marca fallida si seguía `PENDING`; `REFUNDED` dispara el reembolso.
 
 ### Media (`/api/v1/media`)
 
