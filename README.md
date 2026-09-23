@@ -166,6 +166,19 @@ Ambos con CRUD completo, slug autogenerado en `Event`, soft-delete, y
 validación de pertenencia a la festividad/edición del path. Las horas
 (`startTime`/`estimatedEndTime` de `Procession`) se envían como `"HH:mm"`.
 
+### Galerías y documentos (`/api/v1/galleries`, `/api/v1/documents`)
+
+Permiso `media_asset.manage` para galerías, `source.manage` para documentos.
+
+- **`galleries`** + **`galleries/:id/items`** — colección ordenada de
+  `MediaAsset`s ya subidos, opcionalmente ligada a una `FestivalEdition`
+- **`documents`** — documentos históricos (actas, prensa, manuscritos),
+  opcionalmente ligados a un `MediaAsset` (el escaneo) y a un `Source`.
+  Cada `PATCH` guarda automáticamente un snapshot del estado anterior en
+  `GET /documents/:id/versions` antes de aplicar el cambio — verificado
+  real: corregir el título de un acta dejó la versión 1 con el título
+  original en el historial.
+
 ### Vínculos genéricos de media (`/api/v1/media-attachments`)
 
 | Endpoint | Permiso | Descripción |
