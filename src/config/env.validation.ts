@@ -51,6 +51,15 @@ export const envSchema = z
       .int()
       .positive()
       .default(30),
+
+    // Firebase Storage (media: fotos, video, audio, PDFs). Opcional: sin
+    // configurar, StorageService lanza un error claro solo cuando algo
+    // intenta subir un archivo — no bloquea el arranque del resto de la app.
+    FIREBASE_PROJECT_ID: z.string().optional(),
+    FIREBASE_CLIENT_EMAIL: z.string().optional(),
+    FIREBASE_PRIVATE_KEY: z.string().optional(),
+    FIREBASE_STORAGE_BUCKET: z.string().optional(),
+    MEDIA_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(50),
   })
   .superRefine((env, ctx) => {
     // In production, silently falling back to "allow any origin with

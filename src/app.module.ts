@@ -8,6 +8,10 @@ import { LoggerModule } from './config/logger.module';
 import type { AppConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { MailModule } from './mail/mail.module';
+import { StorageModule } from './storage/storage.module';
+import { MediaModule } from './media/media.module';
+import { HeritageModule } from './heritage/heritage.module';
+import { OperationsModule } from './operations/operations.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -21,6 +25,10 @@ import { HealthModule } from './health/health.module';
     LoggerModule,
     PrismaModule,
     MailModule,
+    StorageModule,
+    MediaModule,
+    HeritageModule,
+    OperationsModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

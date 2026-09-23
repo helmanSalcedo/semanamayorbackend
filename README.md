@@ -9,11 +9,14 @@ festival_edition` — para poder soportar otras festividades o municipios en
 el futuro sin quedar acoplado a Timbío.
 
 **Estado actual:** la base de datos está completa y en producción-ready.
-Sobre ella arrancó el backend en NestJS: foundation profesional (config
+Sobre ella corre un backend NestJS con foundation profesional (config
 validada, Prisma, logging estructurado, manejo de errores, rate limiting,
-Swagger) + autenticación/RBAC reales contra el schema `auth`. Todavía no
-hay endpoints de dominio (heritage, finance, cms, etc.) ni frontend — eso
-es lo siguiente sobre esta base.
+Swagger), autenticación/RBAC reales, media (Firebase Storage), y el dominio
+**heritage** + **operations** completo: festividades, ediciones, pasos
+procesionales, imágenes religiosas, sitios religiosos, personas y sus roles
+culturales, trazabilidad de fuentes documentales, eventos y procesiones.
+Sin tocar todavía: finanzas/donaciones, CMS/artículos, directorio comercial,
+ni frontend.
 
 📖 **Empieza por [`docs/database/README.md`](./docs/database/README.md)**
 para la documentación completa de la arquitectura de datos (decisiones de
@@ -34,6 +37,10 @@ diseño, modelo financiero, modelo histórico, auditoría, seguridad, ERD).
   - Verificación de email y reset de contraseña vía `src/mail` (sin
     `SMTP_HOST` configurado, los correos se escriben al log en vez de
     enviarse — suficiente para dev)
+  - Media (`src/media` + `src/storage`): subida de imagen/video/audio/PDF a
+    Firebase Storage (público), con `MediaAsset` en Postgres para metadatos.
+    Sin credenciales de Firebase configuradas, el endpoint de subida devuelve
+    error 500 explícito en vez de fallar el arranque de toda la app
 - Schema multi-dominio (`prisma/schema/*.prisma`) sobre 9 schemas físicos de
   Postgres (`geo`, `heritage`, `operations`, `media`, `cms`, `finance`,
   `business`, `auth`, `audit`)
@@ -87,6 +94,107 @@ autenticación viven bajo `/api/v1/auth`:
 
 El resto de roles (`ADMIN_FESTIVAL`, `FINANCE_MANAGER`, etc.) se asignan
 manualmente vía `auth.user_role` hasta que exista panel administrativo.
+
+### Heritage — festividades (`/api/v1/festivals`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /festivals` | `festival.manage` | Crea una festividad (slug autogenerado desde `name` si se omite) |
+| `GET /festivals` | público | Lista festividades |
+| `GET /festivals/:id` | público | Detalle |
+| `PATCH /festivals/:id` | `festival.manage` | Actualiza (el slug solo cambia si se manda explícito) |
+| `DELETE /festivals/:id` | `festival.manage` | Soft-delete |
+| `POST /festivals/:festivalId/editions` | `festival.manage` | Crea una edición (año) de la festividad |
+| `GET /festivals/:festivalId/editions` | público | Lista ediciones |
+| `GET /festivals/:festivalId/editions/:editionId` | público | Detalle |
+| `PATCH /festivals/:festivalId/editions/:editionId` | `festival.manage` | Actualiza |
+| `DELETE /festivals/:festivalId/editions/:editionId` | `festival.manage` | Hard-delete (falla con 409 si tiene procesiones/eventos/galerías asociadas — `FestivalEdition` no tiene soft-delete en el schema) |
+
+El `id` de una edición es el `festivalEditionId` que acepta `POST /media` para
+organizar el storage por festividad (ver sección de Media). Todos los `GET`
+de listas están paginados (`?page=1&limit=20`, máx. 100), devuelven
+`{ data, meta: { page, limit, total, totalPages } }`.
+
+**Pasos procesionales** (`/festivals/:festivalId/steps`, permiso
+`processional_step.manage`): CRUD completo, slug autogenerado y único por
+festividad, soft-delete. `primaryMediaAssetId` valida contra un `MediaAsset`
+ya subido y crea/reemplaza automáticamente el `MediaAttachment` real
+(role=`PRIMARY`) — no es solo un campo cosmético.
+
+**Imágenes religiosas** (`/festivals/:festivalId/steps/:stepId/religious-images`,
+permiso `religious_image.manage`): anidadas bajo su paso procesional, CRUD
+completo, soft-delete.
+
+**Sitios religiosos/históricos** (`/religious-sites`, permiso
+`religious_site.manage`): iglesias, capillas, sitios históricos — recurso de
+nivel superior scopeado por municipio, no por festividad. CRUD completo,
+slug autogenerado.
+
+**Fuentes documentales** (`/sources`, permiso `source.manage`): catálogo de
+fuentes citables (libro, acta, archivo, testimonio oral, etc.), CRUD
+completo, soft-delete.
+
+**Citas de fuente** (`/content-sources`, permiso `source.manage`): vincula
+una fuente a cualquier entidad citable (`sourceableType` + `sourceableId`:
+persona, paso procesional, imagen religiosa, evento, sitio, documento,
+familia, evento histórico). `GET /content-sources?sourceableType=X&sourceableId=Y`
+lista las fuentes citadas en una entidad — es la trazabilidad documental que
+el proyecto marca como no-negociable en `docs/database/HISTORICAL_MODEL.md`.
+
+**Personas** (`/people`, permiso `person.manage`): personas históricas o
+actuales, CRUD completo, soft-delete.
+
+**Roles de persona** (`/person-role-assignments`, permiso `person.manage`):
+"esta persona fue síndico del Paso X entre 2015 y 2019" — vincula una
+persona + un `RoleType` (síndico, carguero, etc.) + una entidad
+(`subjectType`/`subjectId`: paso, festival, edición, evento, evento
+histórico, sitio), con rango de fechas y fuente opcional.
+`GET /person-role-assignments?personId=X` o `?subjectType=X&subjectId=Y`
+(al menos uno de los dos es obligatorio).
+
+### Operaciones — programación (`/api/v1/festivals/:festivalId/editions/:editionId`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `.../events` | `event.manage` | Programación anual (misas, conciertos, actividades) de una edición |
+| `.../processions` | `procession.manage` | Procesiones de una edición (fecha, horario, recorrido a alto nivel) |
+
+Ambos con CRUD completo, slug autogenerado en `Event`, soft-delete, y
+validación de pertenencia a la festividad/edición del path. Las horas
+(`startTime`/`estimatedEndTime` de `Procession`) se envían como `"HH:mm"`.
+
+### Vínculos genéricos de media (`/api/v1/media-attachments`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /media-attachments` | `media_asset.manage` | Vincula un `MediaAsset` ya subido a cualquier entidad (festival, paso, imagen, sitio, evento, persona, artículo, documento) |
+| `GET /media-attachments?attachableType=X&attachableId=Y` | público | Lista los archivos vinculados a una entidad |
+| `DELETE /media-attachments/:id` | `media_asset.manage` | Quita el vínculo (no borra el archivo) |
+
+Valida en la capa de aplicación que la entidad exista antes de tocar la DB —
+espeja el trigger `media.validate_media_attachment_attachable` para devolver
+un 400 claro en vez de un 500 opaco si algo no cuadra.
+
+### Media (`/api/v1/media`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /media` | `media_asset.manage` | Sube un archivo (`multipart/form-data`: campo `file` + `festivalEditionId` opcional) a Firebase Storage |
+| `GET /media/:id` | público | Metadatos del archivo (url pública, mime type, tamaño, checksum) |
+| `DELETE /media/:id` | `media_asset.manage` | Soft-delete en Postgres + borrado del archivo real en Storage |
+
+Requiere las variables `FIREBASE_*` en `.env` (ver `.env.example`) —
+generarlas desde Firebase Console → Configuración del proyecto → Cuentas de
+servicio → Generar nueva clave privada. Sin configurar, la app arranca igual
+pero `POST /media` devuelve 500 con un mensaje explícito. Los archivos se
+suben como públicos (`file.makePublic()`), acorde a que este es contenido
+cultural pensado para difusión, no privado.
+
+El storage se organiza por entidad cultural, no por fecha de subida: si se
+pasa `festivalEditionId`, el archivo va a
+`festivals/{slug-del-festival}/{año-de-la-edición}/{tipo}/...`; si se omite
+(ej. una foto del directorio comercial que no pertenece a ninguna edición),
+va a `general/{tipo}/...`.
 
 Los tests de integración (`test/domain/*.integration-spec.ts`) verifican
 directamente contra Postgres los invariantes críticos del modelo: creación

@@ -40,13 +40,21 @@ async function seedGeo() {
 async function seedRbac() {
   const roles = [
     { code: 'SUPER_ADMIN', name: 'Super administrador', isSystem: true },
-    { code: 'ADMIN_FESTIVAL', name: 'Administrador de festividad', isSystem: true },
+    {
+      code: 'ADMIN_FESTIVAL',
+      name: 'Administrador de festividad',
+      isSystem: true,
+    },
     { code: 'EDITOR', name: 'Editor de contenido', isSystem: true },
     { code: 'HISTORIAN', name: 'Historiador', isSystem: true },
     { code: 'FINANCE_MANAGER', name: 'Gestor financiero', isSystem: true },
     { code: 'EVENT_MANAGER', name: 'Gestor de eventos', isSystem: true },
     { code: 'MODERATOR', name: 'Moderador', isSystem: true },
-    { code: 'BUSINESS_MANAGER', name: 'Gestor de directorio comercial', isSystem: true },
+    {
+      code: 'BUSINESS_MANAGER',
+      name: 'Gestor de directorio comercial',
+      isSystem: true,
+    },
     { code: 'SPONSOR_MANAGER', name: 'Gestor de patrocinios', isSystem: true },
     { code: 'VIEWER', name: 'Visualizador', isSystem: true },
   ];
@@ -60,13 +68,29 @@ async function seedRbac() {
   }
 
   const permissions = [
-    'donation.create', 'donation.read', 'donation.allocate', 'donation.refund',
-    'article.create', 'article.publish', 'article.unpublish',
-    'processional_step.manage', 'religious_image.manage',
-    'event.manage', 'procession.manage',
-    'sponsorship.manage', 'business.manage', 'business.approve',
-    'user.manage', 'role.manage',
-    'financial_report.publish', 'audit_log.read',
+    'donation.create',
+    'donation.read',
+    'donation.allocate',
+    'donation.refund',
+    'article.create',
+    'article.publish',
+    'article.unpublish',
+    'processional_step.manage',
+    'religious_image.manage',
+    'event.manage',
+    'procession.manage',
+    'media_asset.manage',
+    'festival.manage',
+    'religious_site.manage',
+    'source.manage',
+    'person.manage',
+    'sponsorship.manage',
+    'business.manage',
+    'business.approve',
+    'user.manage',
+    'role.manage',
+    'financial_report.publish',
+    'audit_log.read',
   ];
 
   for (const code of permissions) {
@@ -79,10 +103,15 @@ async function seedRbac() {
 
   // SUPER_ADMIN obtiene todos los permisos; el resto se asigna manualmente
   // desde el panel administrativo cuando exista.
-  const superAdmin = await prisma.role.findUniqueOrThrow({ where: { code: 'SUPER_ADMIN' } });
+  const superAdmin = await prisma.role.findUniqueOrThrow({
+    where: { code: 'SUPER_ADMIN' },
+  });
   const allPermissions = await prisma.permission.findMany();
   await prisma.rolePermission.createMany({
-    data: allPermissions.map((p) => ({ roleId: superAdmin.id, permissionId: p.id })),
+    data: allPermissions.map((p) => ({
+      roleId: superAdmin.id,
+      permissionId: p.id,
+    })),
     skipDuplicates: true,
   });
 }
@@ -102,7 +131,11 @@ async function seedRoleTypes() {
     { code: 'FOTOGRAFO', name: 'Fotógrafo' },
   ];
   for (const rt of roleTypes) {
-    await prisma.roleType.upsert({ where: { code: rt.code }, update: { name: rt.name }, create: rt });
+    await prisma.roleType.upsert({
+      where: { code: rt.code },
+      update: { name: rt.name },
+      create: rt,
+    });
   }
 }
 
@@ -116,7 +149,9 @@ async function seedFinancialCategories() {
     { name: 'Administración', type: 'EXPENSE' },
   ];
   for (const c of categories) {
-    const existing = await prisma.financialCategory.findFirst({ where: { name: c.name } });
+    const existing = await prisma.financialCategory.findFirst({
+      where: { name: c.name },
+    });
     if (!existing) {
       await prisma.financialCategory.create({ data: c });
     }
@@ -131,7 +166,11 @@ async function seedPaymentProviders() {
     { code: 'EPAYCO', name: 'ePayco' },
   ];
   for (const p of providers) {
-    await prisma.paymentProvider.upsert({ where: { code: p.code }, update: { name: p.name }, create: p });
+    await prisma.paymentProvider.upsert({
+      where: { code: p.code },
+      update: { name: p.name },
+      create: p,
+    });
   }
 }
 
@@ -148,7 +187,11 @@ async function seedBusinessCategories() {
     { name: 'Otros', slug: 'otros' },
   ];
   for (const c of categories) {
-    await prisma.businessCategory.upsert({ where: { slug: c.slug }, update: { name: c.name }, create: c });
+    await prisma.businessCategory.upsert({
+      where: { slug: c.slug },
+      update: { name: c.name },
+      create: c,
+    });
   }
 }
 
@@ -160,7 +203,11 @@ async function seedOrganizationTypes() {
     { code: 'INDIVIDUAL', name: 'Persona natural' },
   ];
   for (const t of types) {
-    await prisma.organizationType.upsert({ where: { code: t.code }, update: { name: t.name }, create: t });
+    await prisma.organizationType.upsert({
+      where: { code: t.code },
+      update: { name: t.name },
+      create: t,
+    });
   }
 }
 

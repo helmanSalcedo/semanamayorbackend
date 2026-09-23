@@ -30,6 +30,15 @@ export interface AppConfig {
     };
   };
   tokenCleanupRetentionDays: number;
+  storage: {
+    maxFileSizeMb: number;
+    firebase?: {
+      projectId: string;
+      clientEmail: string;
+      privateKey: string;
+      storageBucket: string;
+    };
+  };
 }
 
 export default (): { app: AppConfig } => {
@@ -70,6 +79,23 @@ export default (): { app: AppConfig } => {
           : undefined,
       },
       tokenCleanupRetentionDays: Number(env.TOKEN_CLEANUP_RETENTION_DAYS),
+      storage: {
+        maxFileSizeMb: Number(env.MEDIA_MAX_FILE_SIZE_MB),
+        firebase:
+          env.FIREBASE_PROJECT_ID &&
+          env.FIREBASE_CLIENT_EMAIL &&
+          env.FIREBASE_PRIVATE_KEY &&
+          env.FIREBASE_STORAGE_BUCKET
+            ? {
+                projectId: env.FIREBASE_PROJECT_ID,
+                clientEmail: env.FIREBASE_CLIENT_EMAIL,
+                // .env stores the PEM with literal "\n" escapes (real
+                // newlines break most .env parsers/quoting) — unescape here.
+                privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                storageBucket: env.FIREBASE_STORAGE_BUCKET,
+              }
+            : undefined,
+      },
     },
   };
 };
