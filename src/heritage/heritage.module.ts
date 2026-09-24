@@ -23,6 +23,11 @@ import { HistoricalEventsController } from './historical-events.controller';
 import { HistoricalEventsService } from './historical-events.service';
 import { ContentRightsController } from './content-rights.controller';
 import { ContentRightsService } from './content-rights.service';
+import { FamiliesController } from './families.controller';
+import { FamiliesService } from './families.service';
+import { FamilyMembersController } from './family-members.controller';
+import { FamilyMembersService } from './family-members.service';
+import { RoleTypesController } from './role-types.controller';
 
 @Module({
   controllers: [
@@ -38,6 +43,9 @@ import { ContentRightsService } from './content-rights.service';
     HistoricalPeriodsController,
     HistoricalEventsController,
     ContentRightsController,
+    FamiliesController,
+    FamilyMembersController,
+    RoleTypesController,
   ],
   providers: [
     FestivalsService,
@@ -52,6 +60,8 @@ import { ContentRightsService } from './content-rights.service';
     HistoricalPeriodsService,
     HistoricalEventsService,
     ContentRightsService,
+    FamiliesService,
+    FamilyMembersService,
   ],
   exports: [
     FestivalsService,

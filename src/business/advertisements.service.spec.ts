@@ -29,7 +29,9 @@ describe('AdvertisementsService', () => {
       },
       mediaAsset: { findUnique: jest.fn() },
     };
-    campaignsService = { findOne: jest.fn().mockResolvedValue({ id: 'camp-1' }) };
+    campaignsService = {
+      findOne: jest.fn().mockResolvedValue({ id: 'camp-1' }),
+    };
     service = new AdvertisementsService(
       prisma as unknown as PrismaService,
       campaignsService as unknown as AdvertisementCampaignsService,

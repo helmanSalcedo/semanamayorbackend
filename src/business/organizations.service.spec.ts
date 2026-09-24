@@ -85,9 +85,7 @@ describe('OrganizationsService', () => {
         id: 'org-1',
         deletedAt: new Date(),
       });
-      await expect(service.findOne('org-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('org-1')).rejects.toThrow(NotFoundException);
     });
   });
 

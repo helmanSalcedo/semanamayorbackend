@@ -98,6 +98,35 @@ autenticación viven bajo `/api/v1/auth`:
 El resto de roles (`ADMIN_FESTIVAL`, `FINANCE_MANAGER`, etc.) se asignan
 manualmente vía `auth.user_role` hasta que exista panel administrativo.
 
+### Catálogos de referencia (`/api/v1/countries`, `/departments`, `/municipalities`, `/localities`, `/role-types`, `/payment-providers`)
+
+Endpoints públicos y de solo lectura sobre datos seeded que otros módulos referencian por UUID. Antes de esta fase no existía forma de descubrir esos UUIDs desde la API — había que consultar Postgres directamente.
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /countries` | Catálogo de países |
+| `GET /departments?countryId=` | Departamentos, filtrable por país |
+| `GET /municipalities?departmentId=` | Municipios, filtrable por departamento — el `id` que piden `Festival`, `Business`, `ReligiousSite`, etc. |
+| `GET /localities?municipalityId=` | Barrios/veredas/corregimientos, filtrable por municipio |
+| `GET /role-types` | Catálogo de tipos de rol cultural (síndico, carguero, sahumadora, historiador...) que pide `PersonRoleAssignment.roleTypeId` |
+| `GET /payment-providers` | Catálogo de proveedores de pago (`MANUAL`/`WOMPI`/`PAYU`/`EPAYCO`) — informativo; `POST /donations/:id/transactions` sigue recibiendo el `providerCode` como string |
+
+### Heritage — genealogía (`/api/v1/families`)
+
+| Endpoint | Permiso | Descripción |
+|---|---|---|
+| `POST /families` | `person.manage` | Crea una familia (árbol genealógico) |
+| `GET /families`, `GET /families/:id` | público | Lista / detalle |
+| `PATCH /families/:id`, `DELETE /families/:id` | `person.manage` | Actualiza / soft-elimina |
+| `POST /families/:familyId/members` | `person.manage` | Vincula una persona a la familia (`relationshipNote` y `sourceId` opcionales) |
+| `GET /families/:familyId/members` | público | Lista los miembros (con la persona incluida) |
+| `DELETE /families/:familyId/members/:memberId` | `person.manage` | Quita el vínculo |
+
+Puntos clave de este módulo:
+- **`sourceId` es opcional a propósito**: la columna es nullable en la base de datos precisamente para no bloquear el primer borrador de un árbol genealógico en construcción (ver `HISTORICAL_MODEL.md` § Familias: "nunca se asume un parentesco sin fuente" es una regla editorial para publicar el vínculo como hecho verificado, no una restricción de esquema). No existe todavía un campo de estado "verificado"/"borrador" en el modelo, así que esta API no fuerza `sourceId` — lo deja disponible para cuando exista ese flujo de publicación.
+- **Vínculo duplicado bloqueado**: intentar vincular la misma persona dos veces a la misma familia responde `409` (constraint único `[familyId, personId]`).
+- Antes de esta fase, `Family`/`FamilyPerson` existían en el schema y `ContentSource` ya los validaba como uno de sus tipos polimórficos posibles, pero no había ninguna forma de crear una familia o un vínculo — era un modelo completo sin interfaz.
+
 ### Heritage — festividades (`/api/v1/festivals`)
 
 | Endpoint | Permiso | Descripción |

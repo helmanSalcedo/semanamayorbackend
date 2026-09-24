@@ -62,7 +62,7 @@ describe('BusinessesService', () => {
       prisma.business.findMany.mockResolvedValue([]);
       prisma.business.count.mockResolvedValue(0);
 
-      await service.findAllPublic({ page: 1, limit: 20, skip: 0 } as never);
+      await service.findAllPublic({ page: 1, limit: 20, skip: 0 });
 
       expect(prisma.business.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

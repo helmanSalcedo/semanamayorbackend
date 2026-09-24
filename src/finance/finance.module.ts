@@ -11,6 +11,7 @@ import { FinancialTransactionsController } from './financial-transactions.contro
 import { FinancialTransactionsService } from './financial-transactions.service';
 import { FinancialReportsController } from './financial-reports.controller';
 import { FinancialReportsService } from './financial-reports.service';
+import { PaymentProvidersController } from './payment-providers.controller';
 
 @Module({
   controllers: [
@@ -20,6 +21,7 @@ import { FinancialReportsService } from './financial-reports.service';
     FinancialCategoriesController,
     FinancialTransactionsController,
     FinancialReportsController,
+    PaymentProvidersController,
   ],
   providers: [
     DonationCampaignsService,
