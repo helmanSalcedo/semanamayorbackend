@@ -273,6 +273,19 @@ Permiso `historical_content.manage` para periodos/hechos históricos,
   defecto `UNKNOWN_PENDING_VERIFICATION` — nunca se asume que algo
   encontrado puede reutilizarse sin verificar
 
+### Auth — mis sesiones (`/api/v1/auth/sessions`)
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /auth/sessions` | Lista las sesiones activas (no revocadas, no expiradas) del usuario autenticado: dispositivo (`userAgent`), IP, fecha de creación/expiración |
+| `DELETE /auth/sessions/:id` | Cierra una sesión remota — revoca su(s) `refreshToken` para que no pueda volver a renovar; el `accessToken` que ya tenía emitido ese dispositivo sigue siendo válido hasta que expire por sí solo (máx. `accessExpiresIn`, normalmente minutos) |
+
+Puntos clave:
+- **`Session` agrupa toda la cadena de rotación, no un token puntual**: cada `POST /auth/refresh` emite un `RefreshToken` nuevo y revoca el anterior (rotación), pero ambos comparten el mismo `sessionId` — por eso "mis sesiones" lista dispositivos/logins reales y no crece con cada renovación silenciosa que hace el frontend en segundo plano. Verificado real: tras varios `refresh` seguidos sobre la misma sesión, `GET /auth/sessions` sigue mostrando la misma fila (mismo `id`, `expiresAt` extendido).
+- **`register`/`login` siempre crean una sesión nueva** (un dispositivo/login distinto cada vez); `refresh` reutiliza la sesión existente del token que se está rotando.
+- **`logout` revoca el refresh token y su sesión** (cierra "este" dispositivo); `DELETE /auth/sessions/:id` hace lo mismo mecanismo pero para "otro" dispositivo sin tener su refresh token a mano.
+- Este módulo existía en el schema desde el inicio (`auth.session` con `userAgent`/`ipAddress`) pero `AuthService` nunca lo usaba — toda la seguridad de sesión corría solo por `RefreshToken`, sin visibilidad de dispositivos ni forma de cerrar sesión remota. Se agregó `session_id` a `refresh_token` (migración `add_session_refresh_token_link`) para poder enlazarlos.
+
 ### Admin — usuarios, roles, permisos, auditoría (`/api/v1/{users,roles,permissions,audit-log}`)
 
 | Endpoint | Permiso | Descripción |

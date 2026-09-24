@@ -90,24 +90,32 @@ model Session {
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
 
   @@index([userId])
   @@map("session")
   @@schema("auth")
 }
 
+/// sessionId agrupa la cadena de rotación de un mismo dispositivo/login: cada
+/// refresh emite un RefreshToken nuevo (y revoca el anterior) pero conserva
+/// el mismo sessionId, para poder listar/cerrar "mis sesiones" por
+/// dispositivo sin depender de un token concreto que ya rotó.
 model RefreshToken {
   id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
+  sessionId String?   @map("session_id") @db.Uuid
   tokenHash String    @unique @map("token_hash") @db.VarChar(255)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([sessionId])
   @@map("refresh_token")
   @@schema("auth")
 }

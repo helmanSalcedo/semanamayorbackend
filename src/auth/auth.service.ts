@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -33,6 +34,11 @@ export interface TokenPair {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+}
+
+export interface SessionMeta {
+  userAgent?: string;
+  ipAddress?: string;
 }
 
 interface UserWithRoles {
@@ -80,6 +86,7 @@ export class AuthService {
 
   async register(
     dto: RegisterDto,
+    sessionMeta?: SessionMeta,
   ): Promise<{ user: AuthenticatedUser } & TokenPair> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -106,11 +113,14 @@ export class AuthService {
 
     await this.sendVerificationEmail(user.id, user.email);
 
-    const tokens = await this.issueTokenPair(user);
+    const tokens = await this.issueTokenPair(user, sessionMeta);
     return { user: this.toAuthenticatedUser(user), ...tokens };
   }
 
-  async login(dto: LoginDto): Promise<{ user: AuthenticatedUser } & TokenPair> {
+  async login(
+    dto: LoginDto,
+    sessionMeta?: SessionMeta,
+  ): Promise<{ user: AuthenticatedUser } & TokenPair> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: USER_WITH_ROLES_INCLUDE,
@@ -134,11 +144,14 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const tokens = await this.issueTokenPair(user);
+    const tokens = await this.issueTokenPair(user, sessionMeta);
     return { user: this.toAuthenticatedUser(user), ...tokens };
   }
 
-  async refresh(refreshToken: string): Promise<TokenPair> {
+  async refresh(
+    refreshToken: string,
+    sessionMeta?: SessionMeta,
+  ): Promise<TokenPair> {
     const tokenHash = hashOpaqueToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
@@ -159,15 +172,64 @@ export class AuthService {
       throw new UnauthorizedException('Cuenta inactiva');
     }
 
-    return this.issueTokenPair(stored.user);
+    // Reuse the same Session across the whole rotation chain — a session is
+    // one device/login, not one ephemeral refresh token.
+    return this.issueTokenPair(stored.user, sessionMeta, stored.sessionId);
   }
 
   async logout(refreshToken: string): Promise<void> {
     const tokenHash = hashOpaqueToken(refreshToken);
-    await this.prisma.refreshToken.updateMany({
-      where: { tokenHash, revokedAt: null },
-      data: { revokedAt: new Date() },
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
     });
+    if (!stored || stored.revokedAt) {
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.update({
+        where: { id: stored.id },
+        data: { revokedAt: new Date() },
+      }),
+      ...(stored.sessionId
+        ? [
+            this.prisma.session.update({
+              where: { id: stored.sessionId },
+              data: { revokedAt: new Date() },
+            }),
+          ]
+        : []),
+    ]);
+  }
+
+  async listSessions(userId: string) {
+    return this.prisma.session.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.userId !== userId) {
+      throw new NotFoundException('Sesión no encontrada');
+    }
+    if (session.revokedAt) {
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.session.update({
+        where: { id: sessionId },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { sessionId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
   }
 
   async resendVerification(email: string): Promise<void> {
@@ -301,7 +363,11 @@ export class AuthService {
     }
   }
 
-  private async issueTokenPair(user: UserWithRoles): Promise<TokenPair> {
+  private async issueTokenPair(
+    user: UserWithRoles,
+    sessionMeta?: SessionMeta,
+    existingSessionId?: string | null,
+  ): Promise<TokenPair> {
     const roles = user.roles.map((ur) => ur.role.code);
     const permissions = [
       ...new Set(
@@ -324,11 +390,20 @@ export class AuthService {
 
     const refreshToken = generateOpaqueToken();
     const refreshExpiresMs = parseDurationMs(this.jwtConfig.refreshExpiresIn);
+    const sessionExpiresAt = new Date(Date.now() + refreshExpiresMs);
+    const sessionId = await this.upsertSession(
+      user.id,
+      existingSessionId,
+      sessionMeta,
+      sessionExpiresAt,
+    );
+
     await this.prisma.refreshToken.create({
       data: {
         userId: user.id,
+        sessionId,
         tokenHash: hashOpaqueToken(refreshToken),
-        expiresAt: new Date(Date.now() + refreshExpiresMs),
+        expiresAt: sessionExpiresAt,
       },
     });
 
@@ -339,6 +414,40 @@ export class AuthService {
         parseDurationMs(this.jwtConfig.accessExpiresIn) / 1000,
       ),
     };
+  }
+
+  /**
+   * A Session represents one device/login, spanning the whole refresh-token
+   * rotation chain. On login/register it creates a new one; on refresh it
+   * extends the same one instead of spawning a new "device" per rotation.
+   */
+  private async upsertSession(
+    userId: string,
+    existingSessionId: string | null | undefined,
+    meta: SessionMeta | undefined,
+    expiresAt: Date,
+  ): Promise<string> {
+    if (existingSessionId) {
+      const updated = await this.prisma.session.update({
+        where: { id: existingSessionId },
+        data: {
+          expiresAt,
+          userAgent: meta?.userAgent,
+          ipAddress: meta?.ipAddress,
+        },
+      });
+      return updated.id;
+    }
+
+    const created = await this.prisma.session.create({
+      data: {
+        userId,
+        expiresAt,
+        userAgent: meta?.userAgent,
+        ipAddress: meta?.ipAddress,
+      },
+    });
+    return created.id;
   }
 
   private toAuthenticatedUser(user: UserWithRoles): AuthenticatedUser {

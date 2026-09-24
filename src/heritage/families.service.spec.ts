@@ -38,9 +38,7 @@ describe('FamiliesService', () => {
         id: 'fam-1',
         deletedAt: new Date(),
       });
-      await expect(service.findOne('fam-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('fam-1')).rejects.toThrow(NotFoundException);
     });
   });
 

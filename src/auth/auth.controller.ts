@@ -1,13 +1,18 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
+  Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthService } from './auth.service';
+import type { Request } from 'express';
+import { AuthService, SessionMeta } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -18,6 +23,13 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedUser } from './types/jwt-payload.interface';
+
+function sessionMetaFrom(req: Request): SessionMeta {
+  return {
+    userAgent: req.headers['user-agent'],
+    ipAddress: req.ip,
+  };
+}
 
 const GENERIC_OK = {
   message: 'Si la solicitud es válida, recibirás un correo en breve',
@@ -31,29 +43,29 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiOperation({ summary: 'Crea una cuenta nueva (rol VIEWER por defecto)' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.authService.register(dto, sessionMetaFrom(req));
   }
 
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Inicia sesión y devuelve access + refresh token' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.authService.login(dto, sessionMetaFrom(req));
   }
 
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rota un refresh token válido por un par nuevo' })
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refreshToken);
+  refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
+    return this.authService.refresh(dto.refreshToken, sessionMetaFrom(req));
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Revoca un refresh token' })
+  @ApiOperation({ summary: 'Revoca un refresh token y su sesión' })
   async logout(@Body() dto: RefreshTokenDto): Promise<void> {
     await this.authService.logout(dto.refreshToken);
   }
@@ -62,6 +74,27 @@ export class AuthController {
   @ApiOperation({ summary: 'Devuelve la identidad del usuario autenticado' })
   me(@CurrentUser() user: AuthenticatedUser) {
     return user;
+  }
+
+  @Get('sessions')
+  @ApiOperation({
+    summary: 'Lista mis sesiones activas (dispositivo, IP, expiración)',
+  })
+  listSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.listSessions(user.sub);
+  }
+
+  @Delete('sessions/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Cierra una sesión remota (revoca su refresh token; el access token en curso expira solo)',
+  })
+  async revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.authService.revokeSession(user.sub, id);
   }
 
   @Public()

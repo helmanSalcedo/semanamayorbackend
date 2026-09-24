@@ -71,6 +71,12 @@ describe('AuthService', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
+    session: {
+      create: jest.Mock;
+      update: jest.Mock;
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let jwtService: { signAsync: jest.Mock };
@@ -96,6 +102,12 @@ describe('AuthService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      session: {
+        create: jest.fn().mockResolvedValue({ id: 'session-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'session-1' }),
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
@@ -268,15 +280,89 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('revokes the matching non-revoked refresh token', async () => {
-      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+    it('revokes the refresh token and its session', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        sessionId: 'session-1',
+        revokedAt: null,
+      });
+      prisma.refreshToken.update.mockResolvedValue({});
+      prisma.session.update.mockResolvedValue({});
+
       await service.logout('some-token');
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ revokedAt: null }),
-          data: { revokedAt: expect.any(Date) },
-        }),
-      );
+
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'rt-1' },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.session.update).toHaveBeenCalledWith({
+        where: { id: 'session-1' },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('does nothing for an unknown or already-revoked token', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+      await service.logout('unknown-token');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('revokeSession', () => {
+    it('404s when the session does not belong to the user', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        id: 'session-1',
+        userId: 'other-user',
+      });
+      await expect(
+        service.revokeSession('user-1', 'session-1'),
+      ).rejects.toThrow('Sesión no encontrada');
+    });
+
+    it('revokes the session and its active refresh tokens', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        revokedAt: null,
+      });
+      prisma.session.update.mockResolvedValue({});
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.revokeSession('user-1', 'session-1');
+
+      expect(prisma.session.update).toHaveBeenCalledWith({
+        where: { id: 'session-1' },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { sessionId: 'session-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('is a no-op when the session is already revoked', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        revokedAt: new Date(),
+      });
+      await service.revokeSession('user-1', 'session-1');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listSessions', () => {
+    it('lists only active, non-expired sessions ordered by newest first', async () => {
+      prisma.session.findMany.mockResolvedValue([]);
+      await service.listSessions('user-1');
+      expect(prisma.session.findMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          revokedAt: null,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     });
   });
 
