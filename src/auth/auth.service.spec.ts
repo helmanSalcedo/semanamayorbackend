@@ -53,7 +53,12 @@ function buildUser(overrides: Partial<Record<string, unknown>> = {}) {
 
 describe('AuthService', () => {
   let prisma: {
-    user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    user: {
+      findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     role: { findUniqueOrThrow: jest.Mock };
     refreshToken: {
       findUnique: jest.Mock;
@@ -76,6 +81,7 @@ describe('AuthService', () => {
       update: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      updateMany: jest.Mock;
     };
     $transaction: jest.Mock;
   };
@@ -85,7 +91,12 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     prisma = {
-      user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      user: {
+        findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       role: { findUniqueOrThrow: jest.fn() },
       refreshToken: {
         findUnique: jest.fn(),
@@ -108,6 +119,7 @@ describe('AuthService', () => {
         update: jest.fn().mockResolvedValue({ id: 'session-1' }),
         findUnique: jest.fn(),
         findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
@@ -366,6 +378,66 @@ describe('AuthService', () => {
     });
   });
 
+  describe('updateProfile', () => {
+    it('updates only fullName/phone and returns the authenticated user shape', async () => {
+      prisma.user.update.mockResolvedValue(
+        buildUser({ fullName: 'Nuevo Nombre' }),
+      );
+
+      const result = await service.updateProfile('user-1', {
+        fullName: 'Nuevo Nombre',
+      });
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'user-1' },
+          data: { fullName: 'Nuevo Nombre', phone: undefined },
+        }),
+      );
+      expect(result.email).toBe('persona@example.com');
+    });
+  });
+
+  describe('changePassword', () => {
+    it('rejects an incorrect current password', async () => {
+      const passwordHash = await argon2.hash('ActualSegura1');
+      prisma.user.findUniqueOrThrow.mockResolvedValue(
+        buildUser({ passwordHash }),
+      );
+      await expect(
+        service.changePassword('user-1', {
+          currentPassword: 'wrong',
+          newPassword: 'NuevaSegura1',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('updates the password and revokes every session when the current password matches', async () => {
+      const passwordHash = await argon2.hash('ActualSegura1');
+      prisma.user.findUniqueOrThrow.mockResolvedValue(
+        buildUser({ passwordHash }),
+      );
+      prisma.user.update.mockResolvedValue({});
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.session.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.changePassword('user-1', {
+        currentPassword: 'ActualSegura1',
+        newPassword: 'NuevaSegura1',
+      });
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.session.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+  });
+
   describe('resendVerification', () => {
     it('does nothing for an unknown email', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
@@ -470,6 +542,7 @@ describe('AuthService', () => {
       prisma.passwordResetToken.update.mockResolvedValue({});
       prisma.user.update.mockResolvedValue({});
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+      prisma.session.updateMany.mockResolvedValue({ count: 2 });
 
       await service.resetPassword('valid', 'NuevaClave1');
 
@@ -477,6 +550,10 @@ describe('AuthService', () => {
         expect.objectContaining({ where: { id: 'user-1' } }),
       );
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.session.updateMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });

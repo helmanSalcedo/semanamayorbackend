@@ -286,6 +286,15 @@ Puntos clave:
 - **`logout` revoca el refresh token y su sesión** (cierra "este" dispositivo); `DELETE /auth/sessions/:id` hace lo mismo mecanismo pero para "otro" dispositivo sin tener su refresh token a mano.
 - Este módulo existía en el schema desde el inicio (`auth.session` con `userAgent`/`ipAddress`) pero `AuthService` nunca lo usaba — toda la seguridad de sesión corría solo por `RefreshToken`, sin visibilidad de dispositivos ni forma de cerrar sesión remota. Se agregó `session_id` a `refresh_token` (migración `add_session_refresh_token_link`) para poder enlazarlos.
 
+### Auth — autogestión de cuenta (`/api/v1/auth/me`, `/api/v1/auth/change-password`)
+
+| Endpoint | Descripción |
+|---|---|
+| `PATCH /auth/me` | Actualiza mi propio `fullName`/`phone` — no permite tocar `email`, `isActive` ni roles (eso sigue siendo exclusivo de `PATCH /users/:id` con `user.manage`) |
+| `POST /auth/change-password` | Cambia mi contraseña estando logueado, requiriendo la actual. Cierra **todas** mis sesiones (igual que el flujo de recuperación por correo) — hay que loguearse de nuevo después |
+
+Antes de esta fase, `UsersController` (`/users`) tenía `@Permissions('user.manage')` a nivel de clase sobre **todos** sus métodos, incluidos los `GET`: un usuario sin ese permiso no podía ni ver ni editar su propio perfil, y la única forma de cambiar de contraseña era el flujo de "olvidé mi contraseña" por correo (no había un "cambiar mi contraseña" estando ya logueado). De paso se corrigió una inconsistencia real: `resetPassword` revocaba los `refreshToken` de todas las sesiones pero no las filas de `Session`, así que `GET /auth/sessions` seguía mostrándolas como activas aunque ya no pudieran renovarse — ahora ambos flujos (`resetPassword` y `changePassword`) revocan sesión y refresh token juntos, en la misma transacción.
+
 ### Admin — usuarios, roles, permisos, auditoría (`/api/v1/{users,roles,permissions,audit-log}`)
 
 | Endpoint | Permiso | Descripción |

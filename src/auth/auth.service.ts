@@ -14,6 +14,8 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
+import type { ChangePasswordDto } from './dto/change-password.dto';
 import type {
   AuthenticatedUser,
   JwtPayload,
@@ -232,6 +234,52 @@ export class AuthService {
     ]);
   }
 
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<AuthenticatedUser> {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { fullName: dto.fullName, phone: dto.phone },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    return this.toAuthenticatedUser(user);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+
+    const currentMatches = await argon2.verify(
+      user.passwordHash,
+      dto.currentPassword,
+    );
+    if (!currentMatches) {
+      throw new UnauthorizedException('La contraseña actual no es correcta');
+    }
+
+    const passwordHash = await argon2.hash(dto.newPassword);
+
+    // Same rule as a token-based reset: changing your password invalidates
+    // every session, including the one used to make this request — the
+    // caller has to log in again with the new password.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+  }
+
   async resendVerification(email: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Always no-op silently for unknown/verified accounts: never reveal
@@ -317,6 +365,10 @@ export class AuthService {
       // A password reset invalidates every existing session: force re-login
       // everywhere the account may currently be logged in.
       this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.session.updateMany({
         where: { userId: record.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       }),

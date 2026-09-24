@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Req,
 } from '@nestjs/common';
@@ -15,9 +16,11 @@ import type { Request } from 'express';
 import { AuthService, SessionMeta } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -74,6 +77,28 @@ export class AuthController {
   @ApiOperation({ summary: 'Devuelve la identidad del usuario autenticado' })
   me(@CurrentUser() user: AuthenticatedUser) {
     return user;
+  }
+
+  @Patch('me')
+  @ApiOperation({ summary: 'Actualiza mi propio nombre/teléfono' })
+  updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(user.sub, dto);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Cambia mi contraseña estando logueado (requiere la actual); cierra todas mis sesiones',
+  })
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.authService.changePassword(user.sub, dto);
   }
 
   @Get('sessions')
