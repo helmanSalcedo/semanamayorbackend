@@ -193,4 +193,26 @@ describe('Donation domain (integridad financiera)', () => {
       }),
     ).rejects.toThrow(/no permite DELETE/);
   });
+
+  it('exige tipo y número de documento del donante juntos (CHECK)', async () => {
+    await expect(
+      runAndRollback(async (tx) => {
+        await tx.donation.create({
+          data: { amount: 10000, donorIdType: 'CC', updatedAt: new Date() },
+        });
+      }),
+    ).rejects.toThrow(/donation_donor_id_complete/);
+
+    await runAndRollback(async (tx) => {
+      const donation = await tx.donation.create({
+        data: {
+          amount: 10000,
+          donorIdType: 'NIT',
+          donorIdNumber: '900123456-7',
+          updatedAt: new Date(),
+        },
+      });
+      expect(donation.donorIdType).toBe('NIT');
+    });
+  });
 });

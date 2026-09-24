@@ -12,6 +12,7 @@ describe('PaymentTransactionsService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
     };
     $transaction: jest.Mock;
   };
@@ -36,6 +37,7 @@ describe('PaymentTransactionsService', () => {
         findMany: jest.fn(),
         count: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
       },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
     };
@@ -149,6 +151,58 @@ describe('PaymentTransactionsService', () => {
       expect(donationsService.confirm).not.toHaveBeenCalled();
       expect(donationsService.markFailedIfPending).not.toHaveBeenCalled();
       expect(donationsService.refund).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordWebhookEvent', () => {
+    const baseParams = {
+      donationId: 'donation-1',
+      providerCode: 'WOMPI',
+      externalTransactionId: 'wompi-tx-1',
+      status: PaymentTransactionStatus.SUCCEEDED,
+      amount: 20000,
+      currency: 'COP',
+    };
+
+    it('rejects an unknown providerCode', async () => {
+      prisma.paymentProvider.findUnique.mockResolvedValue(null);
+      await expect(service.recordWebhookEvent(baseParams)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('is idempotent: returns the existing transaction instead of creating a duplicate', async () => {
+      prisma.paymentProvider.findUnique.mockResolvedValue({
+        id: 'provider-1',
+        code: 'WOMPI',
+      });
+      prisma.paymentTransaction.findUnique.mockResolvedValue({
+        id: 'existing-pt',
+      });
+
+      const result = await service.recordWebhookEvent(baseParams);
+
+      expect(result).toEqual({ id: 'existing-pt' });
+      expect(tx.paymentTransaction.create).not.toHaveBeenCalled();
+      expect(donationsService.confirm).not.toHaveBeenCalled();
+    });
+
+    it('creates the transaction and applies the donation side effect for a new event', async () => {
+      prisma.paymentProvider.findUnique.mockResolvedValue({
+        id: 'provider-1',
+        code: 'WOMPI',
+      });
+      prisma.paymentTransaction.findUnique.mockResolvedValue(null);
+      tx.paymentTransaction.create.mockResolvedValue({ id: 'new-pt' });
+
+      const result = await service.recordWebhookEvent(baseParams);
+
+      expect(result).toEqual({ id: 'new-pt' });
+      expect(donationsService.confirm).toHaveBeenCalledWith(
+        'donation-1',
+        undefined,
+        expect.any(String),
+      );
     });
   });
 });

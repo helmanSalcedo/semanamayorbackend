@@ -4,7 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AuditAction } from '@prisma/client';
+import { recordAuditLog } from '../common/audit-log.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateRoleDto } from './dto/create-role.dto';
 
 const ROLE_INCLUDE = {
   permissions: { include: { permission: true } },
@@ -22,6 +25,31 @@ export interface RoleResponse {
 @Injectable()
 export class RolesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async create(
+    dto: CreateRoleDto,
+    actorUserId?: string,
+  ): Promise<RoleResponse> {
+    const role = await this.prisma.role.create({
+      data: {
+        code: dto.code,
+        name: dto.name,
+        description: dto.description,
+        isSystem: false,
+      },
+      include: ROLE_INCLUDE,
+    });
+
+    await recordAuditLog(this.prisma, {
+      userId: actorUserId,
+      action: AuditAction.CREATE,
+      entityType: 'auth.role',
+      entityId: role.id,
+      newValues: { code: role.code, name: role.name },
+    });
+
+    return this.toResponse(role);
+  }
 
   async findAll(): Promise<RoleResponse[]> {
     const roles = await this.prisma.role.findMany({

@@ -1,6 +1,6 @@
 name: Reporte de bug
 description: Algo no funciona como debería
-labels: ["bug"]
+labels: ['bug']
 body:
   - type: textarea
     id: description

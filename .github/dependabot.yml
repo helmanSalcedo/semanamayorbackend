@@ -8,10 +8,10 @@ updates:
     groups:
       nestjs:
         patterns:
-          - "@nestjs/*"
+          - '@nestjs/*'
       types:
         patterns:
-          - "@types/*"
+          - '@types/*'
 
   - package-ecosystem: github-actions
     directory: /

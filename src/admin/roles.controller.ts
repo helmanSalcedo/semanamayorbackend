@@ -8,8 +8,11 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
+import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { AssignPermissionDto } from './dto/assign-permission.dto';
+import { CreateRoleDto } from './dto/create-role.dto';
 import { RolesService } from './roles.service';
 
 @ApiTags('admin')
@@ -17,6 +20,12 @@ import { RolesService } from './roles.service';
 @Permissions('role.manage')
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Crea un rol personalizado (nunca isSystem)' })
+  create(@Body() dto: CreateRoleDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.rolesService.create(dto, actor.sub);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Lista roles y sus permisos' })

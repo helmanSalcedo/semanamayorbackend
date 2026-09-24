@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { BeneficiaryType, DonorVisibility } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
+import { BeneficiaryType, DonorIdType, DonorVisibility } from '@prisma/client';
 import {
   ArrayMinSize,
   IsBoolean,
@@ -15,8 +15,10 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { normalizeDonorIdNumber } from '../donor-id.util';
 
 export class DonationAllocationInputDto {
   @ApiProperty({ enum: BeneficiaryType })
@@ -74,6 +76,28 @@ export class CreateDonationDto {
   @IsEmail()
   @MaxLength(180)
   donorEmail?: string;
+
+  @ApiPropertyOptional({
+    enum: DonorIdType,
+    description:
+      'Tipo de documento del donante, para que el recibo sirva como soporte tributario. Obligatorio si se envía donorIdNumber',
+  })
+  @ValidateIf((o: CreateDonationDto) => o.donorIdNumber !== undefined)
+  @IsEnum(DonorIdType)
+  donorIdType?: DonorIdType;
+
+  @ApiPropertyOptional({
+    example: '1.234.567',
+    description:
+      'Número de documento; se aceptan puntos y espacios (se normaliza). Obligatorio si se envía donorIdType',
+  })
+  @ValidateIf((o: CreateDonationDto) => o.donorIdType !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizeDonorIdNumber(value) : value,
+  )
+  @IsString()
+  @MaxLength(20)
+  donorIdNumber?: string;
 
   @ApiPropertyOptional({
     enum: DonorVisibility,

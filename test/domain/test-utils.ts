@@ -25,7 +25,7 @@ export async function runAndRollback<T>(
     >,
   ) => Promise<T>,
 ): Promise<T> {
-  const ROLLBACK_MARKER = Symbol('rollback');
+  const ROLLBACK_MARKER = new Error('rollback');
   let result: T | undefined;
   let caught: unknown;
 
@@ -60,6 +60,8 @@ export async function runAndRollback<T>(
     }
   }
 
-  if (caught) throw caught;
+  if (caught) {
+    throw caught instanceof Error ? caught : new Error(JSON.stringify(caught));
+  }
   return result as T;
 }

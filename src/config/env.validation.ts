@@ -60,6 +60,22 @@ export const envSchema = z
     FIREBASE_PRIVATE_KEY: z.string().optional(),
     FIREBASE_STORAGE_BUCKET: z.string().optional(),
     MEDIA_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(50),
+
+    // Emisor que aparece en los recibos de donación (PDF y correo). Para que
+    // el recibo sirva como certificado de donación ante la DIAN debe llevar
+    // el nombre legal y el NIT de la entidad que recibe la donación.
+    RECEIPT_ISSUER_NAME: z.string().min(1).default('Semana Santa de Timbío'),
+    RECEIPT_ISSUER_TAX_ID: z.string().optional(),
+    RECEIPT_ISSUER_ADDRESS: z.string().optional(),
+
+    // Secretos para verificar la firma de los webhooks de pago (ver
+    // src/finance/webhooks/*). Sin configurar, el webhook responde 503 en
+    // vez de aceptar eventos sin poder verificar que vienen del proveedor.
+    WOMPI_EVENTS_SECRET: z.string().optional(),
+    PAYU_API_KEY: z.string().optional(),
+    PAYU_MERCHANT_ID: z.string().optional(),
+    EPAYCO_P_KEY: z.string().optional(),
+    EPAYCO_P_CUST_ID_CLIENTE: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // In production, silently falling back to "allow any origin with

@@ -1,6 +1,6 @@
 name: Propuesta de funcionalidad
 description: Proponer algo nuevo o un cambio de comportamiento
-labels: ["enhancement"]
+labels: ['enhancement']
 body:
   - type: textarea
     id: problem

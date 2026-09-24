@@ -1,0 +1,13 @@
+# build / deps
+dist
+node_modules
+coverage
+.nyc_output
+
+# generados
+prisma/generated
+generated
+pnpm-lock.yaml
+
+# migraciones SQL: se versionan tal cual las generó Prisma
+prisma/schema/migrations

@@ -42,6 +42,19 @@ enum DonorVisibility {
   @@schema("finance")
 }
 
+/// Tipo de documento del donante, para que el recibo sirva como soporte
+/// tributario (DIAN). PPT = Permiso por Protección Temporal.
+enum DonorIdType {
+  CC
+  CE
+  NIT
+  PASSPORT
+  PPT
+
+  @@map("donor_id_type")
+  @@schema("finance")
+}
+
 enum DonationStatus {
   PENDING
   CONFIRMED
@@ -63,6 +76,9 @@ model Donation {
   donorPersonId     String?         @map("donor_person_id") @db.Uuid
   donorNameSnapshot String?         @map("donor_name_snapshot") @db.VarChar(200)
   donorEmail        String?         @map("donor_email") @db.VarChar(180)
+  /// Tipo y número van juntos o ninguno (CHECK en migración raw SQL).
+  donorIdType       DonorIdType?    @map("donor_id_type")
+  donorIdNumber     String?         @map("donor_id_number") @db.VarChar(20)
   donorVisibility   DonorVisibility @default(PRIVATE) @map("donor_visibility")
   isAnonymous       Boolean         @default(false) @map("is_anonymous")
   amount            Decimal         @db.Decimal(14, 2)

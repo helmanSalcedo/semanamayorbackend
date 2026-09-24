@@ -9,7 +9,6 @@ describe('Heritage domain', () => {
   const suffix = rid();
   let municipalityId: string;
   let festivalId: string;
-  let festivalEditionId: string;
   let processionalStepId: string;
 
   beforeAll(async () => {
@@ -53,7 +52,6 @@ describe('Heritage domain', () => {
         status: 'PLANNED',
       },
     });
-    festivalEditionId = edition.id;
     expect(edition.year).toBe(2027);
 
     await expect(
