@@ -39,6 +39,11 @@ export interface AppConfig {
       storageBucket: string;
     };
   };
+  paymentWebhooks: {
+    wompiEventsSecret?: string;
+    payu?: { apiKey: string; merchantId: string };
+    epayco?: { pKey: string; custIdCliente: string };
+  };
 }
 
 export default (): { app: AppConfig } => {
@@ -93,6 +98,20 @@ export default (): { app: AppConfig } => {
                 // newlines break most .env parsers/quoting) — unescape here.
                 privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
                 storageBucket: env.FIREBASE_STORAGE_BUCKET,
+              }
+            : undefined,
+      },
+      paymentWebhooks: {
+        wompiEventsSecret: env.WOMPI_EVENTS_SECRET,
+        payu:
+          env.PAYU_API_KEY && env.PAYU_MERCHANT_ID
+            ? { apiKey: env.PAYU_API_KEY, merchantId: env.PAYU_MERCHANT_ID }
+            : undefined,
+        epayco:
+          env.EPAYCO_P_KEY && env.EPAYCO_P_CUST_ID_CLIENTE
+            ? {
+                pKey: env.EPAYCO_P_KEY,
+                custIdCliente: env.EPAYCO_P_CUST_ID_CLIENTE,
               }
             : undefined,
       },

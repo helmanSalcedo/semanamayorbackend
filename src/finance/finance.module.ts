@@ -12,6 +12,9 @@ import { FinancialTransactionsService } from './financial-transactions.service';
 import { FinancialReportsController } from './financial-reports.controller';
 import { FinancialReportsService } from './financial-reports.service';
 import { PaymentProvidersController } from './payment-providers.controller';
+import { WompiWebhookController } from './webhooks/wompi-webhook.controller';
+import { PayuWebhookController } from './webhooks/payu-webhook.controller';
+import { EpaycoWebhookController } from './webhooks/epayco-webhook.controller';
 
 @Module({
   controllers: [
@@ -22,6 +25,9 @@ import { PaymentProvidersController } from './payment-providers.controller';
     FinancialTransactionsController,
     FinancialReportsController,
     PaymentProvidersController,
+    WompiWebhookController,
+    PayuWebhookController,
+    EpaycoWebhookController,
   ],
   providers: [
     DonationCampaignsService,

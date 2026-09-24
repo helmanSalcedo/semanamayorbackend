@@ -8,19 +8,43 @@ import { PrismaService } from '../prisma/prisma.service';
 
 describe('RolesService', () => {
   let prisma: {
-    role: { findMany: jest.Mock; findUnique: jest.Mock };
+    role: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock };
     permission: { findUnique: jest.Mock };
     rolePermission: { upsert: jest.Mock; deleteMany: jest.Mock };
+    auditLog: { create: jest.Mock };
   };
   let service: RolesService;
 
   beforeEach(() => {
     prisma = {
-      role: { findMany: jest.fn(), findUnique: jest.fn() },
+      role: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
       permission: { findUnique: jest.fn() },
       rolePermission: { upsert: jest.fn(), deleteMany: jest.fn() },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     service = new RolesService(prisma as unknown as PrismaService);
+  });
+
+  describe('create', () => {
+    it('creates a non-system role', async () => {
+      prisma.role.create.mockResolvedValue({
+        id: 'r1',
+        code: 'EDITOR',
+        name: 'Editor',
+        description: null,
+        isSystem: false,
+        permissions: [],
+      });
+
+      const result = await service.create({ code: 'EDITOR', name: 'Editor' });
+
+      expect(prisma.role.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ code: 'EDITOR', isSystem: false }),
+        }),
+      );
+      expect(result.code).toBe('EDITOR');
+    });
   });
 
   describe('findOne', () => {

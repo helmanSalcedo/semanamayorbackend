@@ -60,6 +60,15 @@ export const envSchema = z
     FIREBASE_PRIVATE_KEY: z.string().optional(),
     FIREBASE_STORAGE_BUCKET: z.string().optional(),
     MEDIA_MAX_FILE_SIZE_MB: z.coerce.number().int().positive().default(50),
+
+    // Secretos para verificar la firma de los webhooks de pago (ver
+    // src/finance/webhooks/*). Sin configurar, el webhook responde 503 en
+    // vez de aceptar eventos sin poder verificar que vienen del proveedor.
+    WOMPI_EVENTS_SECRET: z.string().optional(),
+    PAYU_API_KEY: z.string().optional(),
+    PAYU_MERCHANT_ID: z.string().optional(),
+    EPAYCO_P_KEY: z.string().optional(),
+    EPAYCO_P_CUST_ID_CLIENTE: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     // In production, silently falling back to "allow any origin with

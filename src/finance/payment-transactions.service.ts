@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentTransaction, PaymentTransactionStatus } from '@prisma/client';
+import {
+  PaymentTransaction,
+  PaymentTransactionStatus,
+  Prisma,
+} from '@prisma/client';
 import {
   PaginatedResult,
   PaginationDto,
@@ -61,6 +65,96 @@ export class PaymentTransactionsService {
     });
 
     await this.applyDonationSideEffect(donationId, dto.status, actorUserId);
+
+    return transaction;
+  }
+
+  /**
+   * Entry point for real payment-gateway webhooks (Wompi/PayU/ePayco — see
+   * src/finance/webhooks). The signature is already verified by the caller;
+   * this only normalizes the event and applies it. Idempotent on
+   * (providerCode, externalTransactionId): a retried webhook delivery for an
+   * event already recorded returns the existing row instead of erroring or
+   * double-applying the donation side effect (confirm/refund/etc).
+   */
+  async recordWebhookEvent(params: {
+    donationId: string;
+    providerCode: string;
+    externalTransactionId?: string;
+    status: PaymentTransactionStatus;
+    amount: number;
+    currency?: string;
+    paymentMethodType?: string;
+    paidAt?: Date;
+    metadata?: Record<string, unknown>;
+  }): Promise<PaymentTransaction> {
+    await this.donationsService.findOne(params.donationId);
+
+    const provider = await this.prisma.paymentProvider.findUnique({
+      where: { code: params.providerCode },
+    });
+    if (!provider) {
+      throw new BadRequestException(
+        `No existe un PaymentProvider con código ${params.providerCode}`,
+      );
+    }
+
+    if (params.externalTransactionId) {
+      const existing = await this.prisma.paymentTransaction.findUnique({
+        where: {
+          providerId_externalTransactionId: {
+            providerId: provider.id,
+            externalTransactionId: params.externalTransactionId,
+          },
+        },
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
+    let transaction: PaymentTransaction;
+    try {
+      transaction = await this.prisma.$transaction(async (tx) => {
+        await setAuditActor(tx, undefined);
+        return tx.paymentTransaction.create({
+          data: {
+            donationId: params.donationId,
+            providerId: provider.id,
+            externalTransactionId: params.externalTransactionId,
+            status: params.status,
+            amount: params.amount,
+            currency: params.currency,
+            paymentMethodType: params.paymentMethodType,
+            paidAt: params.paidAt,
+            metadata: params.metadata as never,
+          },
+        });
+      });
+    } catch (error) {
+      // Concurrent duplicate delivery racing the findUnique check above.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        params.externalTransactionId
+      ) {
+        return this.prisma.paymentTransaction.findUniqueOrThrow({
+          where: {
+            providerId_externalTransactionId: {
+              providerId: provider.id,
+              externalTransactionId: params.externalTransactionId,
+            },
+          },
+        });
+      }
+      throw error;
+    }
+
+    await this.applyDonationSideEffect(
+      params.donationId,
+      params.status,
+      undefined,
+    );
 
     return transaction;
   }
