@@ -29,17 +29,17 @@ Este documento explica las decisiones no obvias del schema. Los comentarios
 
 ## A. Entidades y dominios
 
-| Schema | Responsabilidad | Tablas clave |
-|---|---|---|
-| `geo` | Jerarquía geográfica reutilizable | country, department, municipality, locality |
-| `heritage` | Patrimonio, historia, personas, festividad | festival, festival_edition, processional_step, religious_image, person, family, source, content_source, content_rights, historical_event, religious_site |
-| `operations` | Procesiones, recorridos, eventos | procession, procession_step, procession_route(_point), event, event_step, event_organization |
-| `media` | Multimedia y documentos | media_asset, media_attachment, gallery(_item), document(_version) |
-| `cms` | Noticias/comunicados | article(_version/_category/_tag), tag |
-| `finance` | Donaciones y transparencia financiera | donation_campaign, donation, donation_allocation, donation_status_history, donation_receipt, payment_provider, payment_transaction, financial_category, financial_transaction, financial_report |
-| `business` | Patrocinadores y directorio comercial | organization(_type), sponsorship(_package), business(_category/_location/_contact/_subscription), advertisement(_campaign/_placement) |
-| `auth` | Usuarios y RBAC | user, role, permission, user_role, role_permission, session, refresh_token, password_reset_token, email_verification |
-| `audit` | Auditoría | audit_log |
+| Schema       | Responsabilidad                            | Tablas clave                                                                                                                                                                                    |
+| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geo`        | Jerarquía geográfica reutilizable          | country, department, municipality, locality                                                                                                                                                     |
+| `heritage`   | Patrimonio, historia, personas, festividad | festival, festival_edition, processional_step, religious_image, person, family, source, content_source, content_rights, historical_event, religious_site                                        |
+| `operations` | Procesiones, recorridos, eventos           | procession, procession_step, procession_route(_point), event, event_step, event_organization                                                                                                    |
+| `media`      | Multimedia y documentos                    | media_asset, media_attachment, gallery(_item), document(_version)                                                                                                                               |
+| `cms`        | Noticias/comunicados                       | article(_version/_category/_tag), tag                                                                                                                                                           |
+| `finance`    | Donaciones y transparencia financiera      | donation_campaign, donation, donation_allocation, donation_status_history, donation_receipt, payment_provider, payment_transaction, financial_category, financial_transaction, financial_report |
+| `business`   | Patrocinadores y directorio comercial      | organization(_type), sponsorship(_package), business(_category/_location/_contact/_subscription), advertisement(_campaign/_placement)                                                           |
+| `auth`       | Usuarios y RBAC                            | user, role, permission, user_role, role_permission, session, refresh_token, password_reset_token, email_verification                                                                            |
+| `audit`      | Auditoría                                  | audit_log                                                                                                                                                                                       |
 
 ## B. Relaciones principales
 
@@ -74,6 +74,7 @@ cosmético.
 **C.3 — Sin tablas históricas duplicadas.** El spec original sugería
 `historical_person`, `historical_document`, `historical_place` como
 entidades separadas de `person`/`document`/`religious_site`. Se fusionaron:
+
 - `historical_person` → `heritage.person` con `isHistoricalOnly: Boolean` y
   `biographyText`, más `content_source` para citar de dónde sale cada dato.
 - `historical_document` → `media.document` (con `document_version` para

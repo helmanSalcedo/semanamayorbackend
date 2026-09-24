@@ -23,14 +23,14 @@ Documentación de la arquitectura de datos. Empieza aquí:
 
 ## Migraciones (orden de aplicación)
 
-| Migración | Contenido |
-|---|---|
-| `20260922194030_init` | Schema completo generado desde `prisma/schema/*.prisma` (70 tablas, 9 schemas) |
-| `20260922194105_check_constraints` | `CHECK` de montos positivos, rangos de fecha/coordenadas |
-| `20260922194139_integrity_triggers` | Triggers de validación para las 6 relaciones polimórficas (`§J.1`) |
-| `20260922194237_financial_integrity_and_audit` | Guardia de suma de allocations, ledger append-only, auditoría automática |
-| `20260922200408_add_municipality_foreign_keys` | FK física faltante `*.municipality_id → geo.municipality` |
-| `20260922201142_donation_receipt_sequence` | `SEQUENCE` + función para `donation_receipt.receipt_number` |
+| Migración                                      | Contenido                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `20260922194030_init`                          | Schema completo generado desde `prisma/schema/*.prisma` (70 tablas, 9 schemas) |
+| `20260922194105_check_constraints`             | `CHECK` de montos positivos, rangos de fecha/coordenadas                       |
+| `20260922194139_integrity_triggers`            | Triggers de validación para las 6 relaciones polimórficas (`§J.1`)             |
+| `20260922194237_financial_integrity_and_audit` | Guardia de suma de allocations, ledger append-only, auditoría automática       |
+| `20260922200408_add_municipality_foreign_keys` | FK física faltante `*.municipality_id → geo.municipality`                      |
+| `20260922201142_donation_receipt_sequence`     | `SEQUENCE` + función para `donation_receipt.receipt_number`                    |
 
 ## Comandos
 

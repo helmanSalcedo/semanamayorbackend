@@ -34,9 +34,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - run: pnpm run format:check
+
       - run: pnpm run lint
 
-      - run: npx tsc --noEmit -p tsconfig.build.json
+      - run: pnpm run typecheck
 
       - run: pnpm test
 

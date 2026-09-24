@@ -10,9 +10,9 @@ allowBuilds:
   protobufjs: true
   unrs-resolver: true
 onlyBuiltDependencies:
-  - "@prisma/client"
-  - "@prisma/engines"
+  - '@prisma/client'
+  - '@prisma/engines'
   - prisma
   - esbuild
-  - "@parcel/watcher"
+  - '@parcel/watcher'
   - unrs-resolver

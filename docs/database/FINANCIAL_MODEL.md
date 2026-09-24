@@ -27,16 +27,16 @@ transacción de pago huérfana.
 
 ## Garantías a nivel de base de datos (no confiar solo en el backend)
 
-| Garantía | Mecanismo | Dónde |
-|---|---|---|
-| `amount > 0` en donation/allocation/payment/etc. | `CHECK` constraint | `check_constraints` migration |
-| `SUM(allocation.amount) <= donation.amount` | Constraint trigger `DEFERRABLE INITIALLY DEFERRED` | `financial_integrity_and_audit` migration |
-| No reducir `donation.amount` por debajo de lo ya asignado | Constraint trigger espejo sobre `UPDATE OF amount` | `financial_integrity_and_audit` migration |
-| Idempotencia de webhooks de pago | `UNIQUE(providerId, externalTransactionId)` | `init` migration |
-| `financial_transaction` es append-only | Trigger que rechaza UPDATE/DELETE | `financial_integrity_and_audit` migration |
-| `donation`/`payment_transaction`/`donation_receipt` nunca se eliminan físicamente | Trigger `prevent_hard_delete` | `financial_integrity_and_audit` migration |
-| Toda mutación en tablas financieras queda auditada | Trigger que escribe en `audit.audit_log` | `financial_integrity_and_audit` migration |
-| Recibo con consecutivo atómico | `SEQUENCE` + función `next_donation_receipt_number()` | `donation_receipt_sequence` migration |
+| Garantía                                                                          | Mecanismo                                             | Dónde                                     |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------- |
+| `amount > 0` en donation/allocation/payment/etc.                                  | `CHECK` constraint                                    | `check_constraints` migration             |
+| `SUM(allocation.amount) <= donation.amount`                                       | Constraint trigger `DEFERRABLE INITIALLY DEFERRED`    | `financial_integrity_and_audit` migration |
+| No reducir `donation.amount` por debajo de lo ya asignado                         | Constraint trigger espejo sobre `UPDATE OF amount`    | `financial_integrity_and_audit` migration |
+| Idempotencia de webhooks de pago                                                  | `UNIQUE(providerId, externalTransactionId)`           | `init` migration                          |
+| `financial_transaction` es append-only                                            | Trigger que rechaza UPDATE/DELETE                     | `financial_integrity_and_audit` migration |
+| `donation`/`payment_transaction`/`donation_receipt` nunca se eliminan físicamente | Trigger `prevent_hard_delete`                         | `financial_integrity_and_audit` migration |
+| Toda mutación en tablas financieras queda auditada                                | Trigger que escribe en `audit.audit_log`              | `financial_integrity_and_audit` migration |
+| Recibo con consecutivo atómico                                                    | `SEQUENCE` + función `next_donation_receipt_number()` | `donation_receipt_sequence` migration     |
 
 ## Por qué el trigger de suma es `DEFERRABLE`
 
@@ -54,6 +54,7 @@ conjunto final.
 
 Se evaluaron y se usaron **solo** donde aportan una garantía que el backend
 no puede dar por sí solo:
+
 - ✅ Trigger de suma de allocations (garantía dura, ver arriba).
 - ✅ Trigger de append-only / no-DELETE (garantía dura).
 - ✅ Trigger de auditoría automática (garantía dura: no depende de que el

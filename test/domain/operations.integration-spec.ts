@@ -9,7 +9,7 @@ describe('Operations domain', () => {
   let stepAId: string;
   let stepBId: string;
   let processionId: string;
-  const eventTypeCode: 'PROCESSION' = 'PROCESSION';
+  const eventTypeCode = 'PROCESSION' as const;
 
   beforeAll(async () => {
     const timbio = await prisma.municipality.findFirstOrThrow({
