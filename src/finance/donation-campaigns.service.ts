@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DonationCampaign } from '@prisma/client';
+import { DonationCampaign, DonationStatus, Prisma } from '@prisma/client';
 import {
   PaginatedResult,
   PaginationDto,
@@ -13,6 +13,16 @@ import { slugify } from '../heritage/slug.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDonationCampaignDto } from './dto/create-donation-campaign.dto';
 import { UpdateDonationCampaignDto } from './dto/update-donation-campaign.dto';
+
+export interface DonationCampaignProgress {
+  campaignId: string;
+  currency: string;
+  goalAmount: Prisma.Decimal | null;
+  raisedAmount: Prisma.Decimal;
+  donationCount: number;
+  /** null when the campaign has no goal; may exceed 100. */
+  percentage: Prisma.Decimal | null;
+}
 
 @Injectable()
 export class DonationCampaignsService {
@@ -104,5 +114,31 @@ export class DonationCampaignsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  /**
+   * Public progress bar: only CONFIRMED donations count, and only totals
+   * are exposed — never donor data (see donor visibility rules).
+   */
+  async getProgress(id: string): Promise<DonationCampaignProgress> {
+    const campaign = await this.findOne(id);
+    const totals = await this.prisma.donation.aggregate({
+      where: { campaignId: id, status: DonationStatus.CONFIRMED },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const raisedAmount = totals._sum.amount ?? new Prisma.Decimal(0);
+    const goal = campaign.goalAmount;
+    return {
+      campaignId: campaign.id,
+      currency: campaign.currency,
+      goalAmount: goal,
+      raisedAmount,
+      donationCount: totals._count._all,
+      percentage:
+        goal && goal.gt(0)
+          ? raisedAmount.div(goal).mul(100).toDecimalPlaces(2)
+          : null,
+    };
   }
 }

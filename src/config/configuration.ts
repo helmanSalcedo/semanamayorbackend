@@ -39,6 +39,11 @@ export interface AppConfig {
       storageBucket: string;
     };
   };
+  receipts: {
+    issuerName: string;
+    issuerTaxId?: string;
+    issuerAddress?: string;
+  };
   paymentWebhooks: {
     wompiEventsSecret?: string;
     payu?: { apiKey: string; merchantId: string };
@@ -100,6 +105,11 @@ export default (): { app: AppConfig } => {
                 storageBucket: env.FIREBASE_STORAGE_BUCKET,
               }
             : undefined,
+      },
+      receipts: {
+        issuerName: env.RECEIPT_ISSUER_NAME,
+        issuerTaxId: env.RECEIPT_ISSUER_TAX_ID || undefined,
+        issuerAddress: env.RECEIPT_ISSUER_ADDRESS || undefined,
       },
       paymentWebhooks: {
         wompiEventsSecret: env.WOMPI_EVENTS_SECRET,

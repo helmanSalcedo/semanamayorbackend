@@ -15,6 +15,15 @@ export interface UploadResult {
   storageKey: string;
 }
 
+export interface UploadOptions {
+  /**
+   * Defaults to true. Private files (e.g. donation receipts, which carry
+   * donor PII) get a non-public gs:// URL and must be served through an
+   * authenticated endpoint via download().
+   */
+  public?: boolean;
+}
+
 /**
  * Thin wrapper around the Firebase Admin Storage SDK. Files are made public
  * on upload — this platform's media (procession photos, historical
@@ -49,19 +58,24 @@ export class StorageService {
     this.bucket = getStorage(app).bucket();
   }
 
+  get isConfigured(): boolean {
+    return this.bucket !== null;
+  }
+
   async upload(
     buffer: Buffer,
     path: string,
     contentType: string,
+    options: UploadOptions = {},
   ): Promise<UploadResult> {
-    if (!this.bucket) {
-      throw new InternalServerErrorException(
-        'Firebase Storage no está configurado',
-      );
-    }
+    const bucket = this.requireBucket();
+    const isPublic = options.public ?? true;
 
-    const file = this.bucket.file(path);
+    const file = bucket.file(path);
     await file.save(buffer, { metadata: { contentType }, resumable: false });
+    if (!isPublic) {
+      return { url: `gs://${this.bucketName}/${path}`, storageKey: path };
+    }
     await file.makePublic();
 
     return {
@@ -70,12 +84,23 @@ export class StorageService {
     };
   }
 
+  async download(storageKey: string): Promise<Buffer> {
+    const [contents] = await this.requireBucket().file(storageKey).download();
+    return contents;
+  }
+
   async delete(storageKey: string): Promise<void> {
+    await this.requireBucket()
+      .file(storageKey)
+      .delete({ ignoreNotFound: true });
+  }
+
+  private requireBucket(): Bucket {
     if (!this.bucket) {
       throw new InternalServerErrorException(
         'Firebase Storage no está configurado',
       );
     }
-    await this.bucket.file(storageKey).delete({ ignoreNotFound: true });
+    return this.bucket;
   }
 }

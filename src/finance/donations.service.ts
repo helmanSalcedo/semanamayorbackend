@@ -7,6 +7,8 @@ import {
   BeneficiaryType,
   Donation,
   DonationStatus,
+  DonorIdType,
+  FinancialCategoryType,
   Prisma,
 } from '@prisma/client';
 import {
@@ -16,7 +18,13 @@ import {
 } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { setAuditActor } from './audit-actor.util';
+import { DonationReceiptsService } from './donation-receipts.service';
+import { formatDonorId, isValidDonorId } from './donor-id.util';
 import { CreateDonationDto } from './dto/create-donation.dto';
+import { UpdateDonorDocumentDto } from './dto/update-donor-document.dto';
+
+/** Seeded INCOME category every confirmed donation is booked under. */
+export const DONATION_INCOME_CATEGORY_NAME = 'Donaciones';
 
 const DONATION_INCLUDE = {
   allocations: true,
@@ -24,13 +32,24 @@ const DONATION_INCLUDE = {
   receipt: true,
 } as const;
 
+function assertValidDonorId(type: DonorIdType, number: string): void {
+  if (!isValidDonorId(type, number)) {
+    throw new BadRequestException(
+      `El número de documento no es válido para el tipo ${type}`,
+    );
+  }
+}
+
 function toCents(amount: number): number {
   return Math.round(amount * 100);
 }
 
 @Injectable()
 export class DonationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly receipts: DonationReceiptsService,
+  ) {}
 
   async create(dto: CreateDonationDto): Promise<Donation> {
     if (dto.campaignId) {
@@ -51,6 +70,10 @@ export class DonationsService {
           'El donante (persona) indicado no existe',
         );
       }
+    }
+
+    if (dto.donorIdType && dto.donorIdNumber) {
+      assertValidDonorId(dto.donorIdType, dto.donorIdNumber);
     }
 
     const allocatedCents = dto.allocations.reduce(
@@ -78,6 +101,8 @@ export class DonationsService {
           donorPersonId: dto.donorPersonId,
           donorNameSnapshot: dto.donorNameSnapshot,
           donorEmail: dto.donorEmail,
+          donorIdType: dto.donorIdType,
+          donorIdNumber: dto.donorIdNumber,
           donorVisibility: dto.donorVisibility,
           isAnonymous: dto.isAnonymous,
           amount: dto.amount,
@@ -130,6 +155,36 @@ export class DonationsService {
     return donation;
   }
 
+  /**
+   * Lets an admin add the donor's document after the fact (e.g. the donor
+   * emails it later). PENDING only: once confirmed, the receipt has already
+   * snapshotted it (and may have been sent), so it must not drift.
+   */
+  async updateDonorDocument(
+    id: string,
+    dto: UpdateDonorDocumentDto,
+    actorUserId: string | undefined,
+  ): Promise<Donation> {
+    await this.requireStatus(
+      id,
+      DonationStatus.PENDING,
+      'modificar el documento del donante de',
+    );
+    assertValidDonorId(dto.donorIdType, dto.donorIdNumber);
+
+    return this.prisma.$transaction(async (tx) => {
+      await setAuditActor(tx, actorUserId);
+      return tx.donation.update({
+        where: { id },
+        data: {
+          donorIdType: dto.donorIdType,
+          donorIdNumber: dto.donorIdNumber,
+        },
+        include: DONATION_INCLUDE,
+      });
+    });
+  }
+
   async confirm(
     id: string,
     actorUserId: string | undefined,
@@ -141,7 +196,7 @@ export class DonationsService {
       'confirmar',
     );
 
-    return this.prisma.$transaction(async (tx) => {
+    const confirmed = await this.prisma.$transaction(async (tx) => {
       await setAuditActor(tx, actorUserId);
 
       await tx.donation.update({
@@ -162,14 +217,29 @@ export class DonationsService {
         where: { donationId: id },
       });
       if (!existingReceipt) {
-        await tx.donationReceipt.create({ data: { donationId: id } });
+        await tx.donationReceipt.create({
+          data: {
+            donationId: id,
+            taxIdSnapshot: formatDonorId(
+              donation.donorIdType,
+              donation.donorIdNumber,
+            ),
+          },
+        });
       }
+
+      await this.bookIncome(tx, donation, actorUserId);
 
       return tx.donation.findUniqueOrThrow({
         where: { id },
         include: DONATION_INCLUDE,
       });
     });
+
+    // After COMMIT: the PDF/email are side effects that must never roll back
+    // (or block) the confirmation itself — deliverAfterConfirm never throws.
+    await this.receipts.deliverAfterConfirm(id);
+    return confirmed;
   }
 
   async refund(
@@ -188,6 +258,7 @@ export class DonationsService {
       DonationStatus.REFUNDED,
       actorUserId,
       reason,
+      (tx) => this.reverseIncome(tx, id, actorUserId, reason),
     );
   }
 
@@ -265,10 +336,14 @@ export class DonationsService {
     toStatus: DonationStatus,
     actorUserId: string | undefined,
     reason?: string,
+    sideEffect?: (tx: Prisma.TransactionClient) => Promise<void>,
   ): Promise<Donation> {
     return this.prisma.$transaction(async (tx) => {
       await setAuditActor(tx, actorUserId);
       await tx.donation.update({ where: { id }, data: { status: toStatus } });
+      if (sideEffect) {
+        await sideEffect(tx);
+      }
       await tx.donationStatusHistory.create({
         data: {
           donationId: id,
@@ -283,6 +358,97 @@ export class DonationsService {
         include: DONATION_INCLUDE,
       });
     });
+  }
+
+  /**
+   * A confirmed donation is real income: book it in the append-only ledger
+   * in the same DB transaction as the status change, so transparency
+   * reports (which only sum financial_transaction) can never miss it.
+   */
+  private async bookIncome(
+    tx: Prisma.TransactionClient,
+    donation: Donation,
+    actorUserId: string | undefined,
+  ): Promise<void> {
+    const categoryId = await this.donationIncomeCategoryId(tx);
+    await tx.financialTransaction.create({
+      data: {
+        categoryId,
+        type: FinancialCategoryType.INCOME,
+        amount: donation.amount,
+        currency: donation.currency,
+        description: `Donación ${donation.id}`,
+        relatedDonationId: donation.id,
+        relatedCampaignId: donation.campaignId,
+        occurredAt: new Date(),
+        createdByUserId: actorUserId,
+      },
+    });
+  }
+
+  /**
+   * The ledger is append-only, so a refund is a compensating EXPENSE entry
+   * pointing at the original INCOME via reversalOfTransactionId. Donations
+   * confirmed before ledger booking existed have no entry to reverse.
+   */
+  private async reverseIncome(
+    tx: Prisma.TransactionClient,
+    donationId: string,
+    actorUserId: string | undefined,
+    reason?: string,
+  ): Promise<void> {
+    const income = await tx.financialTransaction.findFirst({
+      where: {
+        relatedDonationId: donationId,
+        type: FinancialCategoryType.INCOME,
+        reversalOfTransactionId: null,
+        reversedBy: { none: {} },
+      },
+    });
+    if (!income) {
+      return;
+    }
+    await tx.financialTransaction.create({
+      data: {
+        categoryId: income.categoryId,
+        type: FinancialCategoryType.EXPENSE,
+        amount: income.amount,
+        currency: income.currency,
+        description: reason
+          ? `Reembolso de la donación ${donationId}: ${reason}`
+          : `Reembolso de la donación ${donationId}`,
+        relatedDonationId: donationId,
+        relatedCampaignId: income.relatedCampaignId,
+        occurredAt: new Date(),
+        createdByUserId: actorUserId,
+        reversalOfTransactionId: income.id,
+      },
+    });
+  }
+
+  /**
+   * Created on demand if the seed wasn't run, so a payment webhook never
+   * fails to confirm a donation just because the catalog is incomplete.
+   */
+  private async donationIncomeCategoryId(
+    tx: Prisma.TransactionClient,
+  ): Promise<string> {
+    const existing = await tx.financialCategory.findFirst({
+      where: {
+        name: DONATION_INCOME_CATEGORY_NAME,
+        type: FinancialCategoryType.INCOME,
+      },
+    });
+    if (existing) {
+      return existing.id;
+    }
+    const created = await tx.financialCategory.create({
+      data: {
+        name: DONATION_INCOME_CATEGORY_NAME,
+        type: FinancialCategoryType.INCOME,
+      },
+    });
+    return created.id;
   }
 
   private async assertBeneficiaryExists(

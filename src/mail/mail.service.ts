@@ -3,10 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { AppConfig } from '../config/configuration';
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
 export interface SendMailOptions {
   to: string;
   subject: string;
   html: string;
+  attachments?: MailAttachment[];
 }
 
 /**
@@ -47,7 +54,9 @@ export class MailService implements OnModuleInit {
   async send(options: SendMailOptions): Promise<void> {
     if (!this.transporter) {
       this.logger.log(
-        `[mail:dev] to=${options.to} subject="${options.subject}"\n${options.html}`,
+        `[mail:dev] to=${options.to} subject="${options.subject}" attachments=${
+          options.attachments?.map((a) => a.filename).join(',') || 'none'
+        }\n${options.html}`,
       );
       return;
     }
@@ -57,6 +66,7 @@ export class MailService implements OnModuleInit {
       to: options.to,
       subject: options.subject,
       html: options.html,
+      attachments: options.attachments,
     });
   }
 }

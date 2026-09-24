@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DonationCampaignsController } from './donation-campaigns.controller';
 import { DonationCampaignsService } from './donation-campaigns.service';
 import { DonationsController } from './donations.controller';
+import { DonationReceiptsService } from './donation-receipts.service';
 import { DonationsService } from './donations.service';
 import { PaymentTransactionsController } from './payment-transactions.controller';
 import { PaymentTransactionsService } from './payment-transactions.service';
@@ -32,6 +33,7 @@ import { EpaycoWebhookController } from './webhooks/epayco-webhook.controller';
   providers: [
     DonationCampaignsService,
     DonationsService,
+    DonationReceiptsService,
     PaymentTransactionsService,
     FinancialCategoriesService,
     FinancialTransactionsService,

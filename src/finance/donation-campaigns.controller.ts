@@ -45,6 +45,16 @@ export class DonationCampaignsController {
     return this.campaignsService.findOne(id);
   }
 
+  @Public()
+  @Get(':id/progress')
+  @ApiOperation({
+    summary:
+      'Progreso de recaudo de una campaña (solo donaciones CONFIRMED, sin datos del donante)',
+  })
+  getProgress(@Param('id', ParseUUIDPipe) id: string) {
+    return this.campaignsService.getProgress(id);
+  }
+
   @Patch(':id')
   @Permissions('donation_campaign.manage')
   @ApiOperation({ summary: 'Actualiza una campaña' })

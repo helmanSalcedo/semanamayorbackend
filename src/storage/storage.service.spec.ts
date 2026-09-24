@@ -12,6 +12,7 @@ const mockFile = {
   save: jest.fn().mockResolvedValue(undefined),
   makePublic: jest.fn().mockResolvedValue(undefined),
   delete: jest.fn().mockResolvedValue(undefined),
+  download: jest.fn().mockResolvedValue([Buffer.from('file-bytes')]),
 };
 const mockBucket = { file: jest.fn(() => mockFile) };
 
@@ -73,6 +74,30 @@ describe('StorageService', () => {
         url: 'https://storage.googleapis.com/demo.appspot.com/media/x.png',
         storageKey: 'media/x.png',
       });
+    });
+
+    it('keeps a private upload private and returns a gs:// URL', async () => {
+      const service = new StorageService(buildConfigService(firebase));
+      const result = await service.upload(
+        Buffer.from('pdf'),
+        'receipts/2026/REC-1.pdf',
+        'application/pdf',
+        { public: false },
+      );
+
+      expect(mockFile.makePublic).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        url: 'gs://demo.appspot.com/receipts/2026/REC-1.pdf',
+        storageKey: 'receipts/2026/REC-1.pdf',
+      });
+    });
+
+    it('downloads a file by storage key', async () => {
+      const service = new StorageService(buildConfigService(firebase));
+      await expect(service.download('receipts/x.pdf')).resolves.toEqual(
+        Buffer.from('file-bytes'),
+      );
+      expect(mockBucket.file).toHaveBeenCalledWith('receipts/x.pdf');
     });
 
     it('deletes a file by storage key', async () => {
