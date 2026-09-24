@@ -22,6 +22,7 @@ describe('ArticlesService', () => {
       update: jest.Mock;
     };
     articleVersion: { findMany: jest.Mock };
+    auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
   let service: ArticlesService;
@@ -51,6 +52,7 @@ describe('ArticlesService', () => {
         update: jest.fn(),
       },
       articleVersion: { findMany: jest.fn() },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
     };
     service = new ArticlesService(prisma as unknown as PrismaService);

@@ -62,7 +62,8 @@ export class UsersController {
   revokeRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('roleId', ParseUUIDPipe) roleId: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.usersService.revokeRole(id, roleId);
+    return this.usersService.revokeRole(id, roleId, actor.sub);
   }
 }

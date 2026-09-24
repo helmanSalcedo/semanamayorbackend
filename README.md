@@ -314,6 +314,24 @@ confirmar que el usuario pudo crear una fuente después de volver a loguearse
 (el JWT se refresca con los permisos nuevos recién en el próximo login/refresh,
 no en caliente).
 
+**Auditoría de aplicación.** `docs/database/AUDIT.md` documenta que las
+tablas `finance.*` se auditan solas por trigger de Postgres, pero que
+"eventos que no son mutaciones de fila... (login/logout, publish/unpublish
+de contenido, cambios de permisos) deben ser insertados explícitamente por
+el backend" — ese insert explícito no existía: `AuditLogService` era
+100% de solo lectura. Se agregó `recordAuditLog()` (`src/common/audit-log.util.ts`,
+mismo patrón defensivo que `sendMailSafely` — nunca revienta la operación
+que describe si falla) y se conectó en:
+
+- `AuthService.login()` / `logout()` → `LOGIN`/`LOGOUT`, con IP y user-agent
+- `ArticlesService.publish()` / `unpublish()` → snapshot de `status` antes/después
+- `UsersService.assignRole()` / `revokeRole()` → qué rol, a quién, quién lo hizo
+- `BusinessesService.setStatus()` (approve/reject) → snapshot de `status`
+
+Verificado real: cada una de las cuatro acciones anteriores quedó consultable
+por `GET /audit-log?entityType=...&entityId=...` con el `user_id` del actor
+correcto (no del afectado, en el caso de asignar/revocar roles).
+
 ### Finance — donaciones (`/api/v1/donation-campaigns`, `/api/v1/donations`)
 
 | Endpoint | Permiso | Descripción |

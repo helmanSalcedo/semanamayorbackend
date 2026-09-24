@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AuditAction, Prisma } from '@prisma/client';
+import { recordAuditLog } from '../common/audit-log.util';
 import { PaginatedResult, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FindUsersDto } from './dto/find-users.dto';
@@ -96,12 +97,34 @@ export class UsersService {
       create: { userId, roleId, assignedByUserId },
     });
 
+    await recordAuditLog(this.prisma, {
+      userId: assignedByUserId,
+      action: AuditAction.UPDATE,
+      entityType: 'auth.user_role',
+      entityId: userId,
+      newValues: { roleId, roleCode: role.code, action: 'assign' },
+    });
+
     return this.findOne(userId);
   }
 
-  async revokeRole(userId: string, roleId: string): Promise<UserResponse> {
+  async revokeRole(
+    userId: string,
+    roleId: string,
+    revokedByUserId?: string,
+  ): Promise<UserResponse> {
     await this.findOne(userId);
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
+
+    await recordAuditLog(this.prisma, {
+      userId: revokedByUserId,
+      action: AuditAction.UPDATE,
+      entityType: 'auth.user_role',
+      entityId: userId,
+      oldValues: { roleId, roleCode: role?.code, action: 'revoke' },
+    });
+
     return this.findOne(userId);
   }
 

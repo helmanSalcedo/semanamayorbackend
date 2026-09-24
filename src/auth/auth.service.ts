@@ -7,8 +7,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AuditAction } from '@prisma/client';
 import * as argon2 from 'argon2';
 import type { StringValue } from 'ms';
+import { recordAuditLog } from '../common/audit-log.util';
 import type { AppConfig } from '../config/configuration';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -147,6 +149,16 @@ export class AuthService {
     });
 
     const tokens = await this.issueTokenPair(user, sessionMeta);
+
+    await recordAuditLog(this.prisma, {
+      userId: user.id,
+      action: AuditAction.LOGIN,
+      entityType: 'auth.user',
+      entityId: user.id,
+      ipAddress: sessionMeta?.ipAddress,
+      userAgent: sessionMeta?.userAgent,
+    });
+
     return { user: this.toAuthenticatedUser(user), ...tokens };
   }
 
@@ -179,7 +191,7 @@ export class AuthService {
     return this.issueTokenPair(stored.user, sessionMeta, stored.sessionId);
   }
 
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, sessionMeta?: SessionMeta): Promise<void> {
     const tokenHash = hashOpaqueToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
@@ -202,6 +214,15 @@ export class AuthService {
           ]
         : []),
     ]);
+
+    await recordAuditLog(this.prisma, {
+      userId: stored.userId,
+      action: AuditAction.LOGOUT,
+      entityType: 'auth.user',
+      entityId: stored.userId,
+      ipAddress: sessionMeta?.ipAddress,
+      userAgent: sessionMeta?.userAgent,
+    });
   }
 
   async listSessions(userId: string) {

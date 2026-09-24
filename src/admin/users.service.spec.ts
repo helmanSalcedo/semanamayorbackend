@@ -29,6 +29,7 @@ describe('UsersService', () => {
     };
     role: { findUnique: jest.Mock };
     userRole: { upsert: jest.Mock; deleteMany: jest.Mock };
+    auditLog: { create: jest.Mock };
   };
   let service: UsersService;
 
@@ -42,6 +43,7 @@ describe('UsersService', () => {
       },
       role: { findUnique: jest.fn() },
       userRole: { upsert: jest.fn(), deleteMany: jest.fn() },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     service = new UsersService(prisma as unknown as PrismaService);
   });

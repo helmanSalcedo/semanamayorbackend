@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Article, ArticleStatus, Prisma } from '@prisma/client';
+import { Article, ArticleStatus, AuditAction, Prisma } from '@prisma/client';
+import { recordAuditLog } from '../common/audit-log.util';
 import {
   PaginatedResult,
   PaginationDto,
@@ -160,22 +161,40 @@ export class ArticlesService {
     });
   }
 
-  async publish(id: string): Promise<Article> {
-    await this.findOneForManagement(id);
-    return this.prisma.article.update({
+  async publish(id: string, actorUserId?: string): Promise<Article> {
+    const before = await this.findOneForManagement(id);
+    const article = await this.prisma.article.update({
       where: { id },
       data: { status: ArticleStatus.PUBLISHED, publishedAt: new Date() },
       include: ARTICLE_INCLUDE,
     });
+    await recordAuditLog(this.prisma, {
+      userId: actorUserId,
+      action: AuditAction.PUBLISH,
+      entityType: 'cms.article',
+      entityId: id,
+      oldValues: { status: before.status },
+      newValues: { status: article.status, publishedAt: article.publishedAt },
+    });
+    return article;
   }
 
-  async unpublish(id: string): Promise<Article> {
-    await this.findOneForManagement(id);
-    return this.prisma.article.update({
+  async unpublish(id: string, actorUserId?: string): Promise<Article> {
+    const before = await this.findOneForManagement(id);
+    const article = await this.prisma.article.update({
       where: { id },
       data: { status: ArticleStatus.DRAFT },
       include: ARTICLE_INCLUDE,
     });
+    await recordAuditLog(this.prisma, {
+      userId: actorUserId,
+      action: AuditAction.UNPUBLISH,
+      entityType: 'cms.article',
+      entityId: id,
+      oldValues: { status: before.status },
+      newValues: { status: article.status },
+    });
+    return article;
   }
 
   async remove(id: string): Promise<void> {

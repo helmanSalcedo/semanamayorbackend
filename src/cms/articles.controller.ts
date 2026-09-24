@@ -95,16 +95,22 @@ export class ArticlesController {
   @Permissions('article.publish')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publica un artículo' })
-  publish(@Param('id', ParseUUIDPipe) id: string) {
-    return this.articlesService.publish(id);
+  publish(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.articlesService.publish(id, user.sub);
   }
 
   @Post(':id/unpublish')
   @Permissions('article.unpublish')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Despublica un artículo (vuelve a DRAFT)' })
-  unpublish(@Param('id', ParseUUIDPipe) id: string) {
-    return this.articlesService.unpublish(id);
+  unpublish(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.articlesService.unpublish(id, user.sub);
   }
 
   @Delete(':id')

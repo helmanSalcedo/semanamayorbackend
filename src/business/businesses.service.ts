@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Business, BusinessStatus } from '@prisma/client';
+import { AuditAction, Business, BusinessStatus } from '@prisma/client';
+import { recordAuditLog } from '../common/audit-log.util';
 import { PaginatedResult, paginate } from '../common/dto/pagination.dto';
 import { slugify } from '../heritage/slug.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -105,9 +106,25 @@ export class BusinessesService {
     });
   }
 
-  async setStatus(id: string, status: BusinessStatus): Promise<Business> {
-    await this.findOne(id);
-    return this.prisma.business.update({ where: { id }, data: { status } });
+  async setStatus(
+    id: string,
+    status: BusinessStatus,
+    actorUserId?: string,
+  ): Promise<Business> {
+    const before = await this.findOne(id);
+    const business = await this.prisma.business.update({
+      where: { id },
+      data: { status },
+    });
+    await recordAuditLog(this.prisma, {
+      userId: actorUserId,
+      action: AuditAction.UPDATE,
+      entityType: 'business.business',
+      entityId: id,
+      oldValues: { status: before.status },
+      newValues: { status: business.status },
+    });
+    return business;
   }
 
   async remove(id: string): Promise<void> {

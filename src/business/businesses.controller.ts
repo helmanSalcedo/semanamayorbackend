@@ -13,8 +13,10 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BusinessStatus } from '@prisma/client';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { BusinessesService } from './businesses.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { FindBusinessesDto } from './dto/find-businesses.dto';
@@ -70,15 +72,29 @@ export class BusinessesController {
   @Post(':id/approve')
   @Permissions('business.approve')
   @ApiOperation({ summary: 'Aprueba un negocio (pasa a ACTIVE)' })
-  approve(@Param('id', ParseUUIDPipe) id: string) {
-    return this.businessesService.setStatus(id, BusinessStatus.ACTIVE);
+  approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.businessesService.setStatus(
+      id,
+      BusinessStatus.ACTIVE,
+      user.sub,
+    );
   }
 
   @Post(':id/reject')
   @Permissions('business.approve')
   @ApiOperation({ summary: 'Rechaza/inactiva un negocio (pasa a INACTIVE)' })
-  reject(@Param('id', ParseUUIDPipe) id: string) {
-    return this.businessesService.setStatus(id, BusinessStatus.INACTIVE);
+  reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.businessesService.setStatus(
+      id,
+      BusinessStatus.INACTIVE,
+      user.sub,
+    );
   }
 
   @Delete(':id')

@@ -15,6 +15,7 @@ describe('BusinessesService', () => {
     businessCategory: { findUnique: jest.Mock };
     organization: { findUnique: jest.Mock };
     mediaAsset: { findUnique: jest.Mock };
+    auditLog: { create: jest.Mock };
   };
   let service: BusinessesService;
 
@@ -30,6 +31,7 @@ describe('BusinessesService', () => {
       businessCategory: { findUnique: jest.fn() },
       organization: { findUnique: jest.fn() },
       mediaAsset: { findUnique: jest.fn() },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     service = new BusinessesService(prisma as unknown as PrismaService);
   });
@@ -84,6 +86,11 @@ describe('BusinessesService', () => {
       prisma.business.findUnique.mockResolvedValue({
         id: 'biz-1',
         deletedAt: null,
+        status: BusinessStatus.PENDING_REVIEW,
+      });
+      prisma.business.update.mockResolvedValue({
+        id: 'biz-1',
+        status: BusinessStatus.ACTIVE,
       });
       await service.setStatus('biz-1', BusinessStatus.ACTIVE);
       expect(prisma.business.update).toHaveBeenCalledWith({

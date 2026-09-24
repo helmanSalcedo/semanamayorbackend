@@ -69,8 +69,11 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoca un refresh token y su sesión' })
-  async logout(@Body() dto: RefreshTokenDto): Promise<void> {
-    await this.authService.logout(dto.refreshToken);
+  async logout(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.logout(dto.refreshToken, sessionMetaFrom(req));
   }
 
   @Get('me')

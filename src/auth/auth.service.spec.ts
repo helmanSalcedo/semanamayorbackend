@@ -83,6 +83,7 @@ describe('AuthService', () => {
       findMany: jest.Mock;
       updateMany: jest.Mock;
     };
+    auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
   let jwtService: { signAsync: jest.Mock };
@@ -121,6 +122,7 @@ describe('AuthService', () => {
         findMany: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
     jwtService = { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') };
